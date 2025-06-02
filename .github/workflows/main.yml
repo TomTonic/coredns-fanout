@@ -32,6 +32,7 @@ jobs:
 
       - name: Build & Push Docker-Image
         run: |
-          docker build coredns/Dockerfile -t tomtonic/coredns-fanout .
+          cd coredns
+          docker build -f Dockerfile -t tomtonic/coredns-fanout .
           docker login -u ${{ secrets.DOCKER_USER }} -p ${{ secrets.DOCKER_PASS }}
           docker push tomtonic/coredns-fanout
