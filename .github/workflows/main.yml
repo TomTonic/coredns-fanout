@@ -53,7 +53,6 @@ jobs:
           COMBINED_RELEASE_TAG="${{ steps.coredns_release.outputs.tag }}-${{ steps.fanout_release.outputs.tag }}"
           echo "Combined Release Tag: ${COMBINED_RELEASE_TAG}"
           echo "combined_release=${COMBINED_RELEASE_TAG}" >> $GITHUB_OUTPUT
-#          echo "COMBINED_RELEASE_TAG=${COMBINED_RELEASE_TAG}" >> $GITHUB_ENV
   
   # This job builds the Go binary and Docker image for each architecture.
   # The matrix strategy runs one job for "amd64" and another for "arm64".
@@ -128,6 +127,8 @@ jobs:
     name: Create and Push Docker Manifest
     needs: build
     runs-on: ubuntu-latest
+    env:
+      COMBINED_RELEASE_TAG: ${{ needs.get-release-tags.outputs.combined_release }}
     steps:
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -136,39 +137,35 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Create and Push Manifest for Release Tag
-        env:
-          COMBINED_RELEASE_TAG: ${{ needs.get-release-tags.outputs.combined_release }}
         run: |
-          echo "Creating manifest for tag: ${COMBINED_RELEASE_TAG}"
+          echo "Creating manifest for tag: ${{ env.COMBINED_RELEASE_TAG }}"
           # Create a manifest list that includes both architecture-specific images.
-          docker manifest create tomtonic/coredns-fanout:${COMBINED_RELEASE_TAG} \
-            tomtonic/coredns-fanout:${COMBINED_RELEASE_TAG}-amd64 \
-            tomtonic/coredns-fanout:${COMBINED_RELEASE_TAG}-arm64
+          docker manifest create tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }} \
+            tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}-amd64 \
+            tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}-arm64
 
           # Annotate the images to specify the architecture.
-          docker manifest annotate tomtonic/coredns-fanout:${COMBINED_RELEASE_TAG} \
-            tomtonic/coredns-fanout:${COMBINED_RELEASE_TAG}-amd64 --os linux --arch amd64
+          docker manifest annotate tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }} \
+            tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}-amd64 --os linux --arch amd64
 
-          docker manifest annotate tomtonic/coredns-fanout:${COMBINED_RELEASE_TAG} \
-            tomtonic/coredns-fanout:${COMBINED_RELEASE_TAG}-arm64 --os linux --arch arm64
+          docker manifest annotate tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }} \
+            tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}-arm64 --os linux --arch arm64
 
           # Push the multi-arch manifest so that pulling this tag selects the correct image.
-          docker manifest push tomtonic/coredns-fanout:${COMBINED_RELEASE_TAG}
+          docker manifest push tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}
 
       - name: Create and Push Manifest for "latest" Tag
-        env:
-          COMBINED_RELEASE_TAG: ${{ needs.get-release-tags.outputs.combined_release }}
         run: |
           echo "Creating manifest for tag: latest"
           # Optionally, create a "latest" manifest pointing to the same images.
           docker manifest create tomtonic/coredns-fanout:latest \
-            tomtonic/coredns-fanout:${COMBINED_RELEASE_TAG}-amd64 \
-            tomtonic/coredns-fanout:${COMBINED_RELEASE_TAG}-arm64
+            tomtonic/coredns-fanout:latest-amd64 \
+            tomtonic/coredns-fanout:latest-arm64
 
           docker manifest annotate tomtonic/coredns-fanout:latest \
-            tomtonic/coredns-fanout:${COMBINED_RELEASE_TAG}-amd64 --os linux --arch amd64
+            tomtonic/coredns-fanout:latest-amd64 --os linux --arch amd64
 
           docker manifest annotate tomtonic/coredns-fanout:latest \
-            tomtonic/coredns-fanout:${COMBINED_RELEASE_TAG}-arm64 --os linux --arch arm64
+            tomtonic/coredns-fanout:latest-arm64 --os linux --arch arm64
 
           docker manifest push tomtonic/coredns-fanout:latest
