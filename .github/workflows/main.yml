@@ -7,6 +7,7 @@ on:
 env:
   # github.repository as <account>/<repo>
   IMAGE_NAME: ${{ github.repository }}
+  
 
 jobs:
   build:
@@ -19,6 +20,40 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Get Latest CoreDNS Release Tag
+        id: coredns_release
+        uses: actions/github-script@v6
+        with:
+          script: |
+            // Call GitHub API to retrieve the latest release for CoreDNS.
+            const { data } = await github.rest.repos.getLatestRelease({
+              owner: 'coredns',
+              repo: 'coredns'
+            });
+            // Output the tag name so it can be used as an output variable.
+            core.setOutput('tag', data.tag_name);
+
+      - name: Get Latest Fanout Release Tag
+        id: fanout_release
+        uses: actions/github-script@v6
+        with:
+          script: |
+            // Call GitHub API to retrieve the latest release for Fanout.
+            const { data } = await github.rest.repos.getLatestRelease({
+              owner: 'networkservicemesh',
+              repo: 'fanout'
+            });
+            // Set the output with the fetched tag.
+            core.setOutput('tag', data.tag_name);
+
+      - name: Set Combined Release Tag Environment Variable
+        run: |
+          # Combine both release tags with a hyphen separator.
+          # For example: "v1.12.1-v1.11.3"
+          COMBINED_RELEASE_TAG="${{ steps.coredns_release.outputs.tag }}-${{ steps.fanout_release.outputs.tag }}"
+          echo "COMBINED_RELEASE_TAG=${COMBINED_RELEASE_TAG}" >> $GITHUB_ENV
+          echo "Combined Release Tag: ${COMBINED_RELEASE_TAG}"
   
       - name: Install Dependencies
         run: |
@@ -61,11 +96,11 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
-        with:
-          images: tomtonic/coredns-fanout
+#      - name: Extract metadata (tags, labels) for Docker
+#        id: meta
+#        uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
+#        with:
+#          images: tomtonic/coredns-fanout
 
       - name: Build and push Docker image
         id: push
@@ -74,14 +109,15 @@ jobs:
           context: coredns/
           file: coredns/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}
+#          tags: ${{ steps.meta.outputs.tags }}
+#          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-name: index.docker.io/tomtonic/coredns-fanout
-          subject-digest: ${{ steps.push.outputs.digest }}
-          push-to-registry: true
+#      - name: Generate artifact attestation
+#        uses: actions/attest-build-provenance@v2
+#        with:
+#          subject-name: index.docker.io/tomtonic/coredns-fanout
+#          subject-digest: ${{ steps.push.outputs.digest }}
+#          push-to-registry: true
