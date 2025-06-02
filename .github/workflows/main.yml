@@ -10,8 +10,61 @@ env:
   
 
 jobs:
-  build:
+  # This job retrieves the latest release tags from CoreDNS and Fanout,
+  # and then combines them (e.g. "v1.12.1-v1.11.3") to be used as part
+  # of the Docker image tag.
+  get-release-tags:
+    name: Get Combined Release Tags
     runs-on: ubuntu-latest
+    outputs:
+      combined_release: ${{ steps.combine.outputs.combined_release }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Get Latest CoreDNS Release Tag
+        id: coredns_release
+        uses: actions/github-script@v6
+        with:
+          script: |
+            // Call GitHub API to get the latest release for CoreDNS
+            const { data } = await github.rest.repos.getLatestRelease({
+              owner: 'coredns',
+              repo: 'coredns'
+            });
+            core.setOutput('tag', data.tag_name);
+
+      - name: Get Latest Fanout Release Tag
+        id: fanout_release
+        uses: actions/github-script@v6
+        with:
+          script: |
+            // Call GitHub API to get the latest release for Fanout
+            const { data } = await github.rest.repos.getLatestRelease({
+              owner: 'networkservicemesh',
+              repo: 'fanout'
+            });
+            core.setOutput('tag', data.tag_name);
+
+      - name: Combine Release Tags
+        id: combine
+        run: |
+          # Combine both tags with a hyphen separator (e.g. "v1.12.1-v1.11.3")
+          COMBINED_RELEASE_TAG="${{ steps.coredns_release.outputs.tag }}-${{ steps.fanout_release.outputs.tag }}"
+          echo "Combined Release Tag: ${COMBINED_RELEASE_TAG}"
+          echo "::set-output name=combined_release::${COMBINED_RELEASE_TAG}"
+  
+  # This job builds the Go binary and Docker image for each architecture.
+  # The matrix strategy runs one job for "amd64" and another for "arm64".
+  build:
+    name: Build and Push Docker Images
+    needs: get-release-tags
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    env:
+      COMBINED_RELEASE_TAG: ${{ needs.get-release-tags.outputs.combined_release }}
     permissions:
       contents: read
       packages: write
@@ -21,39 +74,39 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Get Latest CoreDNS Release Tag
-        id: coredns_release
-        uses: actions/github-script@v6
-        with:
-          script: |
-            // Call GitHub API to retrieve the latest release for CoreDNS.
-            const { data } = await github.rest.repos.getLatestRelease({
-              owner: 'coredns',
-              repo: 'coredns'
-            });
-            // Output the tag name so it can be used as an output variable.
-            core.setOutput('tag', data.tag_name);
+#      - name: Get Latest CoreDNS Release Tag
+#        id: coredns_release
+#        uses: actions/github-script@v6
+#        with:
+#          script: |
+#            // Call GitHub API to retrieve the latest release for CoreDNS.
+#            const { data } = await github.rest.repos.getLatestRelease({
+#              owner: 'coredns',
+#              repo: 'coredns'
+#            });
+#            // Output the tag name so it can be used as an output variable.
+#            core.setOutput('tag', data.tag_name);
 
-      - name: Get Latest Fanout Release Tag
-        id: fanout_release
-        uses: actions/github-script@v6
-        with:
-          script: |
-            // Call GitHub API to retrieve the latest release for Fanout.
-            const { data } = await github.rest.repos.getLatestRelease({
-              owner: 'networkservicemesh',
-              repo: 'fanout'
-            });
-            // Set the output with the fetched tag.
-            core.setOutput('tag', data.tag_name);
+#      - name: Get Latest Fanout Release Tag
+#        id: fanout_release
+#        uses: actions/github-script@v6
+#        with:
+#          script: |
+#            // Call GitHub API to retrieve the latest release for Fanout.
+#            const { data } = await github.rest.repos.getLatestRelease({
+#              owner: 'networkservicemesh',
+#              repo: 'fanout'
+#            });
+#            // Set the output with the fetched tag.
+#            core.setOutput('tag', data.tag_name);
 
-      - name: Set Combined Release Tag Environment Variable
-        run: |
-          # Combine both release tags with a hyphen separator.
-          # For example: "v1.12.1-v1.11.3"
-          COMBINED_RELEASE_TAG="${{ steps.coredns_release.outputs.tag }}-${{ steps.fanout_release.outputs.tag }}"
-          echo "COMBINED_RELEASE_TAG=${COMBINED_RELEASE_TAG}" >> $GITHUB_ENV
-          echo "Combined Release Tag: ${COMBINED_RELEASE_TAG}"
+ #     - name: Set Combined Release Tag Environment Variable
+ #       run: |
+ #         # Combine both release tags with a hyphen separator.
+ #         # For example: "v1.12.1-v1.11.3"
+ #         COMBINED_RELEASE_TAG="${{ steps.coredns_release.outputs.tag }}-${{ steps.fanout_release.outputs.tag }}"
+ #         echo "COMBINED_RELEASE_TAG=${COMBINED_RELEASE_TAG}" >> $GITHUB_ENV
+ #         echo "Combined Release Tag: ${COMBINED_RELEASE_TAG}"
   
       - name: Install Dependencies
         run: |
@@ -71,17 +124,11 @@ jobs:
           cd coredns
           make
 
-      # https://github.com/sigstore/cosign-installer
-#      - name: Install cosign
-#        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 #v3.5.0
-#        with:
-#          cosign-release: 'v2.2.4'
-
       # Set up BuildKit Docker container builder to be able to build
       # multi-platform images and export cache
       # https://github.com/docker/setup-buildx-action
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
+#      - name: Set up Docker Buildx
+#        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
         
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -96,15 +143,10 @@ jobs:
           context: coredns/
           file: coredns/Dockerfile
           push: true
+          # Build for the target platform. In this case, our Dockerfile simply copies the precompiled binary.
+          platforms: "linux/${{ matrix.arch }}"
           tags: |
-            tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}
-            tomtonic/coredns-fanout:latest
+            tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}-${{ matrix.arch }}
+            tomtonic/coredns-fanout:latest-${{ matrix.arch }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-#      - name: Generate artifact attestation
-#        uses: actions/attest-build-provenance@v2
-#        with:
-#          subject-name: index.docker.io/tomtonic/coredns-fanout
-#          subject-digest: ${{ steps.push.outputs.digest }}
-#          push-to-registry: true
