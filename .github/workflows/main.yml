@@ -52,9 +52,8 @@ jobs:
           # Combine both tags with a hyphen separator (e.g. "v1.12.1-v1.11.3")
           COMBINED_RELEASE_TAG="${{ steps.coredns_release.outputs.tag }}-${{ steps.fanout_release.outputs.tag }}"
           echo "Combined Release Tag: ${COMBINED_RELEASE_TAG}"
-          echo "Combined Release Tag: ${COMBINED_RELEASE_TAG}"
-          echo "COMBINED_RELEASE_TAG=${COMBINED_RELEASE_TAG}" >> $GITHUB_ENV
-
+          echo "combined_release=${COMBINED_RELEASE_TAG}" >> $GITHUB_OUTPUT
+#          echo "COMBINED_RELEASE_TAG=${COMBINED_RELEASE_TAG}" >> $GITHUB_ENV
   
   # This job builds the Go binary and Docker image for each architecture.
   # The matrix strategy runs one job for "amd64" and another for "arm64".
