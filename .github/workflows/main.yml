@@ -30,10 +30,38 @@ jobs:
           cd coredns
           make
 
-      - name: Build & Push Docker-Image
-        run: |
-          cd coredns
-          docker build -f Dockerfile -t tomtonic/coredns-fanout .
-          # docker login -u ${{ secrets.DOCKER_USER }} -p ${{ secrets.DOCKER_PASS }}
-          echo ${{ secrets.DOCKER_PASS }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
-          docker push tomtonic/coredns-fanout
+#      - name: Build & Push Docker-Image
+#        run: |
+#          cd coredns
+#          docker build -f Dockerfile -t tomtonic/coredns-fanout .
+#          echo ${{ secrets.DOCKER_PASS }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
+#          docker push tomtonic/coredns-fanout
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PASS }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: tomtonic/coredns-fanout
+
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        with:
+          context: coredns/
+          file: coredns/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: index.docker.io/tomtonic/coredns-fanout
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
