@@ -125,7 +125,7 @@ jobs:
   # ---------------------------------------------------------------------------
   manifest:
     name: Create and Push Docker Manifest
-    needs: build
+    needs: [build, get-release-tags] # get-release-tags also needs to be mentioned here to be able to access its OUTPUT, i.e., access needs.get-release-tags.outputs.combined_release below
     runs-on: ubuntu-latest
     env:
       COMBINED_RELEASE_TAG: ${{ needs.get-release-tags.outputs.combined_release }}
