@@ -82,25 +82,12 @@ jobs:
       # https://github.com/docker/setup-buildx-action
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
-
-#      - name: Build & Push Docker-Image
-#        run: |
-#          cd coredns
-#          docker build -f Dockerfile -t tomtonic/coredns-fanout .
-#          echo ${{ secrets.DOCKER_PASS }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
-#          docker push tomtonic/coredns-fanout
-
+        
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-#      - name: Extract metadata (tags, labels) for Docker
-#        id: meta
-#        uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
-#        with:
-#          images: tomtonic/coredns-fanout
 
       - name: Build and push Docker image
         id: push
@@ -109,9 +96,9 @@ jobs:
           context: coredns/
           file: coredns/Dockerfile
           push: true
-          tags: tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}
-#          tags: ${{ steps.meta.outputs.tags }}
-#          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}
+            tomtonic/coredns-fanout:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
