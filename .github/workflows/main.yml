@@ -140,7 +140,7 @@ jobs:
         run: |
           echo "Creating manifest for tag: ${{ env.COMBINED_RELEASE_TAG }}"
           # Create a manifest list that includes both architecture-specific images.
-          docker manifest create tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }} \
+          docker manifest create --purge tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }} \
             tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}-amd64 \
             tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}-arm64
 
@@ -158,7 +158,7 @@ jobs:
         run: |
           echo "Creating manifest for tag: latest"
           # Optionally, create a "latest" manifest pointing to the same images.
-          docker manifest create tomtonic/coredns-fanout:latest \
+          docker manifest create --purge tomtonic/coredns-fanout:latest \
             tomtonic/coredns-fanout:latest-amd64 \
             tomtonic/coredns-fanout:latest-arm64
 
