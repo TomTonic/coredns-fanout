@@ -34,5 +34,6 @@ jobs:
         run: |
           cd coredns
           docker build -f Dockerfile -t tomtonic/coredns-fanout .
-          docker login -u ${{ secrets.DOCKER_USER }} -p ${{ secrets.DOCKER_PASS }}
+          # docker login -u ${{ secrets.DOCKER_USER }} -p ${{ secrets.DOCKER_PASS }}
+          echo ${{ secrets.DOCKER_PASS }} | docker login -u ${{ secrets.DOCKER_USER }} --password-stdin
           docker push tomtonic/coredns-fanout
