@@ -63,11 +63,11 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-#      - name: Extract metadata (tags, labels) for Docker
-#        id: meta
-#        uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
-#        with:
-#          images: tomtonic/coredns-fanout
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
+        with:
+          images: tomtonic/coredns-fanout
 
       - name: Build and push Docker image
         id: push
@@ -76,8 +76,8 @@ jobs:
           context: coredns/
           file: coredns/Dockerfile
           push: true
-#          tags: ${{ steps.meta.outputs.tags }}
-#          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
