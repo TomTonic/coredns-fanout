@@ -1,1 +1,16 @@
-
+services:
+  coredns:
+    container_name: dns-cache
+    image: tomtonic/coredns-fanout:latest
+    command: -conf /etc/coredns/Corefile
+    networks:
+      ipv4:
+        ipv4_address: 192.168.1.100
+      ipv6:
+        ipv6_address: fd00::100
+    volumes:
+      - .:/etc/coredns
+    ports:
+      - 53:53/udp # DNS over UDP ("normal" DNS)
+      - 53:53/tcp # DNS over TCP
+    restart: always
