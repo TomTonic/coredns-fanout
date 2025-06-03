@@ -1,0 +1,84 @@
+# This example configures a light and fast DNS cache for your LAN using CoreDNS with multiple forwarders for both IPv4 and IPv6.
+# The cache will listen on internal addresses and forward queries to multiple upstream DNS servers.
+# The forwarders are configured to use DNS over TLS (DoT) for secure communication and validated DNS responses from Quad9 and DNS0.eu.
+# For more information on how to configure, see https://coredns.io/plugins/cache/
+
+# TODO for YOU: Adjust the bind addresses (192.168.1.100 and fd00::100) and forwarder addresses as needed for your network setup.
+
+. {
+    bind 192.168.1.100              # internal IPv4 address where the DNS cache shall be reachable, e.g. 192.168.1.100
+    bind fd00::100                  # internal IPv6 address where the DNS cache shall be reachable, e.g. fd00::100
+        bufsize 1232
+        local
+
+    # fan out DNS queries in parallel to multiple forwarders, four for IPv4 and four for IPv6 in this case
+    fanout . 127.0.0.1:5301 127.0.0.1:5302 [::1]:5303 [::1]:5304 127.0.0.1:5305 127.0.0.1:5306 [::1]:5307 [::1]:5308
+    cache {                         # see https://coredns.io/plugins/cache/
+        success 100000              # setting for caching successful responses. the maximum number of packets we cache before we start evicting (randomly)
+        denial 20000                # setting for caching denial of existence responses. the maximum number of packets we cache before we start evicting (LRU)
+        prefetch 5 3600s            # prefetch popular items when they are about to be expunged from the cache.
+        serve_stale 3600s immediate # cache will serve an expired entry to a client if there is one available as long as it has not been expired for longer than DURATION. immediate will immediately send the expired entry to the client before checking to see if the entry is available from the source
+    }
+    log . "{remote} - {class} {type} {name} EDNS-DO:{>do} RCODE:{rcode} FLAGS:{>rflags} {duration}" {
+        class all
+    }
+    loop
+    errors
+    health
+}
+.:5301 {
+    bind 127.0.0.1 ::1
+    forward . tls://9.9.9.11 {
+        tls_servername "dns11.quad9.net"
+        health_check 10s
+    }
+}
+.:5302 {
+    bind 127.0.0.1 ::1
+    forward . tls://149.112.112.11 {
+        tls_servername "dns11.quad9.net"
+        health_check 10s
+    }
+}
+.:5303 {
+    bind 127.0.0.1 ::1
+    forward . tls://2620:fe::11 {
+        tls_servername "dns11.quad9.net"
+        health_check 10s
+    }
+}
+.:5304 {
+    bind 127.0.0.1 ::1
+    forward . tls://2620:fe::fe:11 {
+        tls_servername "dns11.quad9.net"
+        health_check 10s
+    }
+}
+.:5305 {
+    bind 127.0.0.1 ::1
+    forward . tls://185.14.45.185 {
+        tls_servername "dns0.eu"
+        health_check 10s
+    }
+}
+.:5306 {
+    bind 127.0.0.1 ::1
+    forward . tls://213.226.71.175 {
+        tls_servername "dns0.eu"
+        health_check 10s
+    }
+}
+.:5307 {
+    bind 127.0.0.1 ::1
+    forward . tls://2a03:90c0:94::34 {
+        tls_servername "dns0.eu"
+        health_check 10s
+    }
+}
+.:5308 {
+    bind 127.0.0.1 ::1
+    forward . tls://2a06:f902:1:100:9000:9000:4217:b201 {
+        tls_servername "dns0.eu"
+        health_check 10s
+    }
+}
