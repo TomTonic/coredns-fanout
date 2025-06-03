@@ -17,7 +17,7 @@
         policy weighted-random      # select DNS servers randomly based on weighted-random-server-count and weighted-random-load-factor params
                                     # weighted-random-server-count is the number of DNS servers to be requested. Equals to the number of specified IPs by default.
                                     # weighted-random-load-factor is the probability of selecting a server. This is specified in the order of the list of IP addresses and takes values between 1 and 100. By default, all servers have an equal probability of 100.
-        race                        # gives priority to the first result, whether it is negative or not, as long as it is a standard DNS result. Multiple upstream servers are configured but one of them is down, query a non-existent domain. If race is enable, we will get NXDOMAIN result quickly, otherwise we will get "connection timed out" result in a few seconds.
+        # race                      # gives priority to the first result, whether it is negative or not, as long as it is a standard DNS result. Multiple upstream servers are configured but one of them is down, query a non-existent domain. If race is enable, we will get NXDOMAIN result quickly, otherwise we will get "connection timed out" result in a few seconds.
     }
     cache {                         # see https://coredns.io/plugins/cache/
         success 100000              # setting for caching successful responses. the maximum number of packets we cache before we start evicting (randomly)
