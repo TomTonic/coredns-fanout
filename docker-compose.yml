@@ -1,13 +1,9 @@
 services:
   coredns:
     container_name: dns-cache
-    image: tomtonic/coredns-fanout:latest
+    image: tomtonic/coredns-fanout:latest-amd64
     command: -conf /etc/coredns/Corefile
-    networks:
-      ipv4:
-        ipv4_address: 192.168.1.100
-      ipv6:
-        ipv6_address: fd00::100
+    network_mode: host
     volumes:
       - .:/etc/coredns
     ports:
