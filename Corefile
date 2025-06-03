@@ -3,16 +3,22 @@
 # The forwarders are configured to use DNS over TLS (DoT) for secure communication and validated DNS responses from Quad9 and DNS0.eu.
 # For more information on how to configure, see https://coredns.io/plugins/cache/
 
-# TODO for YOU: Adjust the bind addresses (192.168.1.100 and fd00::100) and forwarder addresses as needed for your network setup.
+# TODO for YOU: Adjust the bind addresses (127.0.0.1 and ::1) and forwarder addresses as needed for your network setup.
 
 . {
-    bind 192.168.1.100              # internal IPv4 address where the DNS cache shall be reachable, e.g. 192.168.1.100
-    bind fd00::100                  # internal IPv6 address where the DNS cache shall be reachable, e.g. fd00::100
+    bind 127.0.0.1                  # internal IPv4 address where the DNS cache shall be reachable, e.g. 192.168.1.100
+    bind ::1                        # internal IPv6 address where the DNS cache shall be reachable, e.g. fd00::100
         bufsize 1232
         local
 
     # fan out DNS queries in parallel to multiple forwarders, four for IPv4 and four for IPv6 in this case
-    fanout . 127.0.0.1:5301 127.0.0.1:5302 [::1]:5303 [::1]:5304 127.0.0.1:5305 127.0.0.1:5306 [::1]:5307 [::1]:5308
+    # see https://coredns.io/plugins/fanout/
+    fanout . 127.0.0.1:5301 127.0.0.1:5302 [::1]:5303 [::1]:5304 127.0.0.1:5305 127.0.0.1:5306 [::1]:5307 [::1]:5308 {
+        policy weighted-random      # select DNS servers randomly based on weighted-random-server-count and weighted-random-load-factor params
+                                    # weighted-random-server-count is the number of DNS servers to be requested. Equals to the number of specified IPs by default.
+                                    # weighted-random-load-factor is the probability of selecting a server. This is specified in the order of the list of IP addresses and takes values between 1 and 100. By default, all servers have an equal probability of 100.
+        race                        # gives priority to the first result, whether it is negative or not, as long as it is a standard DNS result. Multiple upstream servers are configured but one of them is down, query a non-existent domain. If race is enable, we will get NXDOMAIN result quickly, otherwise we will get "connection timed out" result in a few seconds.
+    }
     cache {                         # see https://coredns.io/plugins/cache/
         success 100000              # setting for caching successful responses. the maximum number of packets we cache before we start evicting (randomly)
         denial 20000                # setting for caching denial of existence responses. the maximum number of packets we cache before we start evicting (LRU)
