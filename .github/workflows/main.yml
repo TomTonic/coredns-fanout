@@ -59,21 +59,37 @@ jobs:
       COMBINED_RELEASE_TAG: ${{ needs.get-release-tags.outputs.combined_release }}
 
     steps:
+      - name: Abort if all tag exists
+        id: check
+        run: |
+          echo "Checking Docker Hub for existing tag..."
+          if docker manifest inspect "tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}-${{ matrix.arch }}" > /dev/null 2>&1; then
+            echo "✅ Tag '${{ env.COMBINED_RELEASE_TAG }}-${{ matrix.arch }}' exists. Skipping..."
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Tag '${{ env.COMBINED_RELEASE_TAG }}-${{ matrix.arch }}' does not exist. Building image."
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout Repository
+        if: steps.check.outputs.exists != 'true'
         uses: actions/checkout@v4
 
       - name: Install Dependencies
+        if: steps.check.outputs.exists != 'true'
         run: |
           sudo apt update && sudo apt upgrade -y
           sudo apt install -y golang make
 
       - name: Get CoreDNS & Plugin
+        if: steps.check.outputs.exists != 'true'
         run: |
           git clone https://github.com/coredns/coredns.git
           cd coredns
           echo "fanout:github.com/networkservicemesh/fanout" >> plugin.cfg
 
       - name: Build CoreDNS
+        if: steps.check.outputs.exists != 'true'
         run: |
           cd coredns
           make
@@ -82,15 +98,18 @@ jobs:
       # multi-platform images and export cache
       # https://github.com/docker/setup-buildx-action
       - name: Set up Docker Buildx
+        if: steps.check.outputs.exists != 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
+        if: steps.check.outputs.exists != 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push Docker image
+        if: steps.check.outputs.exists != 'true'
         id: push
         uses: docker/build-push-action@v6
         with:
