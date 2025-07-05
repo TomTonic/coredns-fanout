@@ -137,6 +137,7 @@ jobs:
           else
             export GOARCH=${{ matrix.arch }}
           fi
+          echo "GOOS=${GOOS}, GOARCH=${GOARCH}, GOARM=${GOARM}"
           make
 
       # Set up BuildKit Docker container builder to be able to build
