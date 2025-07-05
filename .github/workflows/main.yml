@@ -84,7 +84,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [amd64, arm64, armhf]
+        arch:
+          - amd64
+          - arm64
+          - armhf
     env:
       COMBINED_RELEASE_TAG: ${{ needs.get-release-tags.outputs.combined_release }}
 
@@ -123,10 +126,17 @@ jobs:
           cd coredns
           echo "fanout:github.com/networkservicemesh/fanout" >> plugin.cfg
 
-      - name: Build CoreDNS
+      - name: Build CoreDNS for ${{ matrix.arch }}
         if: steps.check.outputs.exists != 'true'
         run: |
           cd coredns
+          export GOOS=linux
+          if [ "${{ matrix.arch }}" = "armhf" ]; then
+            export GOARCH=arm
+            export GOARM=7
+          else
+            export GOARCH=${{ matrix.arch }}
+          fi
           make
 
       # Set up BuildKit Docker container builder to be able to build
