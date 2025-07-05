@@ -59,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [amd64, arm64]
+        arch: [amd64, arm64, armhf]
     env:
       COMBINED_RELEASE_TAG: ${{ needs.get-release-tags.outputs.combined_release }}
 
