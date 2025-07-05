@@ -51,6 +51,9 @@ jobs:
           echo "Combined Release Tag: ${COMBINED_RELEASE_TAG}"
           echo "combined_release=${COMBINED_RELEASE_TAG}" >> $GITHUB_OUTPUT
 
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
       - name: Update README with latest release tag
         id: update_readme
         run: |
