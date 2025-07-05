@@ -64,6 +64,7 @@ jobs:
           sed -i "s/Latest Release Tag: .*/Latest Release Tag: ${{ env.COMBINED_RELEASE_TAG }}/" README.md
           # Commit the changes
           git config --global user.name "GitHub Action Auto-Build"
+          git add README.md
           git commit -m "Update README with latest version check data"
           echo "README updated with latest release tag."
 
