@@ -56,19 +56,22 @@ jobs:
 
       - name: Update README.md with latest release tag
         id: update_readme
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "Updating README with latest release tag..."
           # Update the README.md file with the combined release tag
           sed -i "s/Latest CoreDNS Release: .*/Latest CoreDNS Release: ${{ steps.coredns_release.outputs.tag }}/" README.md
           sed -i "s/Latest Fanout Release: .*/Latest Fanout Release: ${{ steps.fanout_release.outputs.tag }}/" README.md
           sed -i "s/Latest Release Tag of coredns-fanout: .*/Latest Release Tag of coredns-fanout: ${{ env.COMBINED_RELEASE_TAG }}/" README.md
-          # Commit the changes
+          echo "README.md updated with latest release tag. Pushing changes..."
           git config --global user.name "GitHub Action Auto-Build"
           git config --global user.email "action@github.com"
           git add README.md
           git commit -m "Update README with latest version check data" || echo "No changes to commit"
-          git push origin HEAD:${GITHUB_REF#refs/heads/}
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/TomTonic/coredns-fanout.git HEAD:main
           echo "README.md updated with latest release tag."
+#          git push origin HEAD:${GITHUB_REF#refs/heads/}
 
   # This job builds the Go binary and Docker image for each architecture.
   # The matrix strategy runs one job for "amd64" and another for "arm64".
