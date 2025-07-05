@@ -5,13 +5,13 @@ A Docker container for a local high performance DNS cache for your notebook or y
 The Docker image encapsulates a standard build of [CoreDNS](https://github.com/coredns/coredns) with an activated [fanout](https://github.com/networkservicemesh/fanout) plugin.
 Plattform specific Docker images are built nightly and can be obtained from the Docker Hub repository [tomtonic/coredns-fanout](https://hub.docker.com/r/tomtonic/coredns-fanout).
 
-Latest release lookup: 05-07-2025 17:22
+Latest release lookup: 05.07.2025 17:26 UTC
 
 Latest CoreDNS release: v1.12.2
 
 Latest Fanout release: v1.11.3
 
-Release tag for coredns-fanout Docker image: 
+Release tag for coredns-fanout Docker image: v1.12.2-v1.11.3
 
 ## How to install
 
