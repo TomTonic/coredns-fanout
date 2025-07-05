@@ -56,8 +56,8 @@ jobs:
 
       - name: Update README.md with latest release tag
         id: update_readme
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        env:
+#          ACCESS_TOKEN: ${{ secrets.COREDNS_AUTOBUILD_PAT }}
         run: |
           echo "Updating README with latest release tag..."
           # Update the README.md file with the combined release tag
@@ -69,7 +69,7 @@ jobs:
           git config --global user.email "action@github.com"
           git add README.md
           git commit -m "Update README with latest version check data" || echo "No changes to commit"
-          git push https://x-access-token:${GITHUB_TOKEN}@github.com/TomTonic/coredns-fanout.git HEAD:main
+          git push https://x-access-token:${{ secrets.COREDNS_AUTOBUILD_PAT }}@github.com/TomTonic/coredns-fanout.git HEAD:main
           echo "README.md updated with latest release tag."
 #          git push origin HEAD:${GITHUB_REF#refs/heads/}
 
