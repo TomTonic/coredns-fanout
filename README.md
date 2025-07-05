@@ -9,7 +9,7 @@ Latest CoreDNS Release: abc
 
 Latest Fanout Release: def
 
-Latest Release Tag: ghi
+Latest Release Tag of coredns-fanout: ghi
 
 ## How to install
 
