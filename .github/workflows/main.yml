@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       combined_release: ${{ steps.combine.outputs.combined_release }}
+    permissions:
+      contents: write  # Needed to push changes
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@6c439dc8bdf85cadbbce9ed30d1c7b959517bc49 # v2.12.2
@@ -53,6 +55,8 @@ jobs:
 
       - name: Checkout Repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0  # Needed for pushing
 
       - name: Update README.md with latest release tag
         id: update_readme
@@ -69,8 +73,9 @@ jobs:
           git config --global user.email "action@github.com"
           git add README.md
           git commit -m "Update README with latest version check data" || echo "No changes to commit"
-          git push https://x-access-token:${{ secrets.COREDNS_AUTOBUILD_PAT }}@github.com/TomTonic/coredns-fanout.git HEAD:main
+          git push origin main
           echo "README.md updated with latest release tag."
+#           git push https://x-access-token:${{ secrets.COREDNS_AUTOBUILD_PAT }}@github.com/TomTonic/coredns-fanout.git HEAD:main
 #          git push origin HEAD:${GITHUB_REF#refs/heads/}
 
   # This job builds the Go binary and Docker image for each architecture.
