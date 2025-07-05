@@ -60,16 +60,14 @@ jobs:
 
       - name: Update README.md with latest release tag
         id: update_readme
-        env:
-          COMBINED_RELEASE_TAG: ${{ needs.get-release-tags.outputs.combined_release }}
         run: |
           echo "Updating README with latest release tag..."
           # Update the README.md file with the combined release tag
-          DATE_UTC=$(date -u +"%d-%m-%Y %H:%M")
+          DATE_UTC=$(date -u +"%d.%m.%Y %H:%M UTC")
           sed -i "s/Latest release lookup: .*/Latest release lookup: $DATE_UTC/" README.md
           sed -i "s/Latest CoreDNS release: .*/Latest CoreDNS release: ${{ steps.coredns_release.outputs.tag }}/" README.md
           sed -i "s/Latest Fanout release: .*/Latest Fanout release: ${{ steps.fanout_release.outputs.tag }}/" README.md
-          sed -i "s/Release tag for coredns-fanout Docker image: .*/Release tag for coredns-fanout Docker image: ${{ env.COMBINED_RELEASE_TAG }}/" README.md
+          sed -i "s/Release tag for coredns-fanout Docker image: .*/Release tag for coredns-fanout Docker image: ${{ steps.coredns_release.outputs.tag }}-${{ steps.fanout_release.outputs.tag }}/" README.md
           echo "README.md updated with latest release tag. Pushing changes..."
           git config --global user.name "GitHub Action Auto-Build"
           git config --global user.email "action@github.com"
