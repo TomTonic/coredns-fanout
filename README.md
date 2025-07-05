@@ -6,7 +6,9 @@ The Docker image encapsulates a standard build of [CoreDNS](https://github.com/c
 Plattform specific Docker images are built nightly and can be obtained from the Docker Hub repository [tomtonic/coredns-fanout](https://hub.docker.com/r/tomtonic/coredns-fanout).
 
 Latest CoreDNS Release: abc
+
 Latest Fanout Release: def
+
 Latest Release Tag: ghi
 
 ## How to install
