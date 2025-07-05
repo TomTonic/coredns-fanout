@@ -130,6 +130,11 @@ jobs:
         if: steps.check.outputs.exists != 'true'
         run: |
           cd coredns
+
+          # Go can cross-compile, but any build step that runs a generated binary (like code generators or go:generate) must be compiled for and run on the build host architecture.
+          make gen
+
+          # Only set GOARCH/GOARM/GOOS for the final build step, not for generation steps.
           export GOOS=linux
           if [ "${{ matrix.arch }}" = "armhf" ]; then
             export GOARCH=arm
@@ -138,7 +143,7 @@ jobs:
             export GOARCH=${{ matrix.arch }}
           fi
           echo "GOOS=${GOOS}, GOARCH=${GOARCH}, GOARM=${GOARM}"
-          make
+          make coredns
 
       # Set up BuildKit Docker container builder to be able to build
       # multi-platform images and export cache
