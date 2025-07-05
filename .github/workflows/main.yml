@@ -94,7 +94,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: Abort if all tag exists
+      - name: Abort if tag exists
         id: check
         run: |
           echo "Checking Docker Hub for existing tag..."
