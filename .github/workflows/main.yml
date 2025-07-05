@@ -72,7 +72,7 @@ jobs:
           git config --global user.name "GitHub Action Auto-Build"
           git config --global user.email "action@github.com"
           git add README.md
-          git commit -m "Update README with latest version check data" || echo "No changes to commit"
+          git commit -m "Update release info [auto]" || echo "No changes to commit"
           git push origin main
           echo "README.md updated with latest release tag."
 
