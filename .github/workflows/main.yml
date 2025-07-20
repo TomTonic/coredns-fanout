@@ -116,12 +116,6 @@ jobs:
         if: steps.check.outputs.exists != 'true'
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-#      - name: Install Dependencies
-#        if: steps.check.outputs.exists != 'true'
-#        run: |
-#          sudo apt update && sudo apt upgrade -y
-#          sudo apt install -y golang make
-
       - name: Setup Go
         if: steps.check.outputs.exists != 'true'
         uses: actions/setup-go@v5
@@ -175,6 +169,15 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
+
+      - name: Run Trivy in GitHub SBOM mode and submit results to Dependency Graph
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: ./coredns
+          format: github
+          output: dependency-results.sbom.json
+          github-pat: ${{ secrets.GITHUB_TOKEN }}
 
       # Set up BuildKit Docker container builder to be able to build
       # multi-platform images and export cache
