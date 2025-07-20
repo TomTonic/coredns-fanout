@@ -145,6 +145,28 @@ jobs:
           echo "GOOS=${GOOS}, GOARCH=${GOARCH}, GOARM=${GOARM}"
           make coredns
 
+#      - name: Gosec Scan
+#        if: steps.check.outputs.exists != 'true'
+#        run: |
+#          cd coredns
+#          go install github.com/securego/gosec/v2/cmd/gosec@latest
+#          gosec ./...
+
+      - name: Run Trivy vulnerability scanner in repo mode
+        if: steps.check.outputs.exists != 'true'
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
       # Set up BuildKit Docker container builder to be able to build
       # multi-platform images and export cache
       # https://github.com/docker/setup-buildx-action
