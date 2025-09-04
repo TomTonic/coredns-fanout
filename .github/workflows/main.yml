@@ -157,7 +157,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner in repo mode
         if: steps.check.outputs.exists != 'true'
-        uses: aquasecurity/trivy-action@0.33.0
+        uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: fs
           scan-ref: ./coredns
@@ -173,7 +173,7 @@ jobs:
 
       - name: Run Trivy in GitHub SBOM mode and submit results to Dependency Graph
         if: steps.check.outputs.exists != 'true'
-        uses: aquasecurity/trivy-action@0.33.0
+        uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: fs
           scan-ref: ./coredns
