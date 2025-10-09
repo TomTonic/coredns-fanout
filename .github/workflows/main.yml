@@ -120,7 +120,7 @@ jobs:
         if: steps.check.outputs.exists != 'true'
         uses: actions/setup-go@v6
         with:
-          go-version: 1.24.5
+          go-version: 1.25.2
 
       - name: Get CoreDNS & Plugin
         if: steps.check.outputs.exists != 'true'
