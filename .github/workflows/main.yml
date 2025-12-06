@@ -54,7 +54,7 @@ jobs:
           echo "combined_release=${COMBINED_RELEASE_TAG}" >> $GITHUB_OUTPUT
 
       - name: Checkout Repository
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           fetch-depth: 0  # Needed for pushing
 
@@ -114,7 +114,7 @@ jobs:
 
       - name: Checkout Repository
         if: steps.check.outputs.exists != 'true'
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Setup Go
         if: steps.check.outputs.exists != 'true'
