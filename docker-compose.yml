@@ -1,7 +1,7 @@
 services:
   coredns:
     container_name: dns-cache
-    image: tomtonic/coredns-fanout:latest-amd64
+    image: tomtonic/coredns-fanout:latest
     command: -conf /etc/coredns/Corefile
     network_mode: host
     volumes:
