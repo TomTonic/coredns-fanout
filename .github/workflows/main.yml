@@ -71,6 +71,19 @@ jobs:
           echo "Pinned Go toolchain: ${GO_TOOLCHAIN}"
           echo "Pinned runtime base image: ${RUNTIME_BASE}"
 
+      - name: Verify pinned Go toolchain
+        run: |
+          ACTUAL_GO_TOOLCHAIN=$(docker run --rm --platform linux/amd64 "${{ steps.deps.outputs.go_image }}" go version | awk '{print $3, $4}')
+          EXPECTED_GO_TOOLCHAIN="${{ steps.deps.outputs.go_toolchain }}"
+
+          echo "Expected Go toolchain: ${EXPECTED_GO_TOOLCHAIN}"
+          echo "Actual Go toolchain:   ${ACTUAL_GO_TOOLCHAIN}"
+
+          if [ "${ACTUAL_GO_TOOLCHAIN}" != "${EXPECTED_GO_TOOLCHAIN}" ]; then
+            echo "Pinned go_toolchain in build-versions.json does not match go_image." >&2
+            exit 1
+          fi
+
       - name: Determine version bump
         id: version
         run: |
@@ -149,7 +162,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      # security-events: write
     env:
       COREDNS_TAG: ${{ needs.determine-version.outputs.coredns_tag }}
       FANOUT_TAG: ${{ needs.determine-version.outputs.fanout_tag }}
@@ -175,6 +188,8 @@ jobs:
 
       - name: Test once + build all target binaries
         run: |
+          mkdir -p artifacts
+
           docker run --rm \
             -v "${{ github.workspace }}:/work" \
             -w /work/coredns \
@@ -239,7 +254,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
     strategy:
       matrix:
         include:
@@ -277,6 +291,22 @@ jobs:
           cp artifacts/Dockerfile build-context/Dockerfile
           cp artifacts/coredns-${{ matrix.arch }} build-context/coredns
           file build-context/coredns
+
+          case "${{ matrix.arch }}" in
+            amd64)
+              file build-context/coredns | grep -q 'x86-64'
+              ;;
+            arm64)
+              file build-context/coredns | grep -Eq 'aarch64|ARM aarch64'
+              ;;
+            armhf)
+              file build-context/coredns | grep -Eq 'ARM|EABI5'
+              ;;
+            *)
+              echo "Unknown matrix arch: ${{ matrix.arch }}" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
