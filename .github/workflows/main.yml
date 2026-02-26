@@ -290,6 +290,8 @@ jobs:
           mkdir -p build-context
           cp artifacts/Dockerfile build-context/Dockerfile
           cp artifacts/coredns-${{ matrix.arch }} build-context/coredns
+          chmod +x build-context/coredns
+          ls -l build-context/coredns
           file build-context/coredns
 
           case "${{ matrix.arch }}" in
