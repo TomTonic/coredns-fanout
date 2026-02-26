@@ -140,11 +140,101 @@ jobs:
           echo "new_version=${NEW_VERSION}"  >> $GITHUB_OUTPUT
 
   # ---------------------------------------------------------------------------
-  # Job 2: Build the Go binary and Docker image for each architecture.
+  # Job 2: Preflight build/tests once and produce binaries for all architectures.
+  # ---------------------------------------------------------------------------
+  preflight:
+    name: Preflight (pull/test/build binaries once)
+    needs: determine-version
+    if: needs.determine-version.outputs.build_needed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      COREDNS_TAG: ${{ needs.determine-version.outputs.coredns_tag }}
+      FANOUT_TAG: ${{ needs.determine-version.outputs.fanout_tag }}
+      GO_IMAGE: ${{ needs.determine-version.outputs.go_image }}
+
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout Repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Get CoreDNS & Plugin
+        run: |
+          git clone --branch ${{ env.COREDNS_TAG }} --depth 1 https://github.com/coredns/coredns.git
+          cd coredns
+          echo "fanout:github.com/networkservicemesh/fanout" >> plugin.cfg
+
+      - name: Pull pinned Go image once
+        run: docker pull ${{ env.GO_IMAGE }}
+
+      - name: Test once + build all target binaries
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/work" \
+            -w /work/coredns \
+            -e FANOUT_TAG=${{ env.FANOUT_TAG }} \
+            ${{ env.GO_IMAGE }} \
+            sh -ec '
+              apt-get -qq update
+              apt-get -qq install --no-install-recommends make git gcc libc6-dev ca-certificates
+              rm -rf /var/lib/apt/lists/*
+
+              go mod edit -require github.com/networkservicemesh/fanout@${FANOUT_TAG}
+              go mod tidy
+
+              make gen
+              # Skip upstream integration tests that are known to be flaky in CI containers.
+              go test $(go list ./... | grep -v "^github.com/coredns/coredns/test$")
+
+              # Allow git operations inside the container to access the mounted repo
+              git config --global --add safe.directory /work/coredns
+
+              mkdir -p /work/artifacts
+
+              export GOOS=linux
+              export GOARCH=amd64
+              unset GOARM
+              echo "Building for GOOS=${GOOS}, GOARCH=${GOARCH}, GOARM=n/a"
+              make coredns
+              cp coredns /work/artifacts/coredns-amd64
+
+              export GOOS=linux
+              export GOARCH=arm64
+              unset GOARM
+              echo "Building for GOOS=${GOOS}, GOARCH=${GOARCH}, GOARM=n/a"
+              make coredns
+              cp coredns /work/artifacts/coredns-arm64
+
+              export GOOS=linux
+              export GOARCH=arm
+              export GOARM=7
+              echo "Building for GOOS=${GOOS}, GOARCH=${GOARCH}, GOARM=${GOARM}"
+              make coredns
+              cp coredns /work/artifacts/coredns-armhf
+            '
+
+          cp coredns/Dockerfile artifacts/Dockerfile
+
+      - name: Upload CoreDNS build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coredns-build-artifacts
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Build and push per-arch Docker image from prebuilt artifacts.
   # ---------------------------------------------------------------------------
   build:
     name: Build (${{ matrix.arch }})
-    needs: determine-version
+    needs: [determine-version, preflight]
     if: needs.determine-version.outputs.build_needed == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -167,10 +257,6 @@ jobs:
             goarm: "7"
     env:
       VERSION: ${{ needs.determine-version.outputs.new_version }}
-      COREDNS_TAG: ${{ needs.determine-version.outputs.coredns_tag }}
-      FANOUT_TAG: ${{ needs.determine-version.outputs.fanout_tag }}
-      GO_IMAGE: ${{ needs.determine-version.outputs.go_image }}
-      GO_TOOLCHAIN: ${{ needs.determine-version.outputs.go_toolchain }}
       RUNTIME_BASE: ${{ needs.determine-version.outputs.runtime_base }}
 
     steps:
@@ -179,57 +265,18 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: Checkout Repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Download CoreDNS build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: coredns-build-artifacts
+          path: artifacts
 
-      - name: Get CoreDNS & Plugin
+      - name: Prepare build context
         run: |
-          git clone --branch ${{ env.COREDNS_TAG }} --depth 1 https://github.com/coredns/coredns.git
-          cd coredns
-          echo "fanout:github.com/networkservicemesh/fanout" >> plugin.cfg
-
-      - name: Build CoreDNS in ${{ env.GO_IMAGE }} for ${{ matrix.arch }}
-        run: |
-          RUN_TESTS=0
-          if [ "${{ matrix.arch }}" = "amd64" ]; then
-            RUN_TESTS=1
-          fi
-
-          docker run --rm \
-            -v "${{ github.workspace }}:/work" \
-            -w /work/coredns \
-            -e TARGET_GOOS=linux \
-            -e TARGET_GOARCH=${{ matrix.goarch }} \
-            -e TARGET_GOARM=${{ matrix.goarm }} \
-            -e FANOUT_TAG=${{ env.FANOUT_TAG }} \
-            -e RUN_TESTS=${RUN_TESTS} \
-            ${{ env.GO_IMAGE }} \
-            sh -ec '
-              apt-get -qq update
-              apt-get -qq install --no-install-recommends make git gcc libc6-dev ca-certificates
-              rm -rf /var/lib/apt/lists/*
-              go mod edit -require github.com/networkservicemesh/fanout@${FANOUT_TAG}
-              go mod tidy
-              make gen
-              if [ "${RUN_TESTS}" = "1" ]; then
-                # Skip upstream integration tests that are known to be flaky in CI containers.
-                go test $(go list ./... | grep -v '^github.com/coredns/coredns/test$')
-              fi
-
-              export GOOS="${TARGET_GOOS}"
-              export GOARCH="${TARGET_GOARCH}"
-              if [ -n "${TARGET_GOARM}" ]; then
-                export GOARM="${TARGET_GOARM}"
-              else
-                unset GOARM
-              fi
-
-              # Allow git operations inside the container to access the mounted repo
-              git config --global --add safe.directory /work/coredns
-
-              echo "Building for GOOS=${GOOS}, GOARCH=${GOARCH}, GOARM=${GOARM:-n/a}"
-              make coredns
-            '
+          mkdir -p build-context
+          cp artifacts/Dockerfile build-context/Dockerfile
+          cp artifacts/coredns-${{ matrix.arch }} build-context/coredns
+          file build-context/coredns
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
@@ -243,8 +290,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
-          context: coredns/
-          file: coredns/Dockerfile
+          context: build-context/
+          file: build-context/Dockerfile
           push: true
           platforms: ${{ matrix.platform }}
           build-args: |
@@ -255,7 +302,7 @@ jobs:
           cache-to: type=gha,scope=${{ matrix.arch }},mode=max
 
   # ---------------------------------------------------------------------------
-  # Job 3: Create multi-arch manifests and push floating tags.
+  # Job 4: Create multi-arch manifests and push floating tags.
   # Tags pushed: v2.MINOR.PATCH, v2.MINOR, v2, latest
   # ---------------------------------------------------------------------------
   manifest:
@@ -340,7 +387,7 @@ jobs:
           docker manifest push tomtonic/coredns-fanout:latest
 
   # ---------------------------------------------------------------------------
-  # Job 4: Commit version.json and README *after* a successful build & push.
+  # Job 5: Commit version.json and README *after* a successful build & push.
   # This ensures the stored state only advances when images actually exist.
   # ---------------------------------------------------------------------------
   finalize:
