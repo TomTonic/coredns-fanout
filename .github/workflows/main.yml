@@ -198,9 +198,9 @@ jobs:
           docker run --rm \
             -v "${{ github.workspace }}:/work" \
             -w /work/coredns \
-            -e GOOS=linux \
-            -e GOARCH=${{ matrix.goarch }} \
-            -e GOARM=${{ matrix.goarm }} \
+            -e TARGET_GOOS=linux \
+            -e TARGET_GOARCH=${{ matrix.goarch }} \
+            -e TARGET_GOARM=${{ matrix.goarm }} \
             -e FANOUT_TAG=${{ env.FANOUT_TAG }} \
             -e RUN_TESTS=${RUN_TESTS} \
             ${{ env.GO_IMAGE }} \
@@ -214,6 +214,15 @@ jobs:
               if [ "${RUN_TESTS}" = "1" ]; then
                 go test ./...
               fi
+
+              export GOOS="${TARGET_GOOS}"
+              export GOARCH="${TARGET_GOARCH}"
+              if [ -n "${TARGET_GOARM}" ]; then
+                export GOARM="${TARGET_GOARM}"
+              else
+                unset GOARM
+              fi
+
               echo "Building for GOOS=${GOOS}, GOARCH=${GOARCH}, GOARM=${GOARM:-n/a}"
               make coredns
             '
