@@ -45,6 +45,12 @@
   "packageRules": [
     {
       "matchManagers": ["custom.regex"],
+      "matchDatasources": ["github-releases", "github-tags"],
+      "pinDigests": false
+    },
+    {
+      "matchManagers": ["custom.regex"],
+      "matchDatasources": ["docker"],
       "pinDigests": true
     },
     {
