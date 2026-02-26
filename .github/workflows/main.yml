@@ -441,7 +441,7 @@ jobs:
           sed -i "s/Latest CoreDNS release: .*/Latest CoreDNS release: ${{ env.COREDNS_TAG }}/" README.md
           sed -i "s/Latest Fanout release: .*/Latest Fanout release: ${{ env.FANOUT_TAG }}/" README.md
           sed -i "s|Go toolchain: .*|Go toolchain: ${{ env.GO_TOOLCHAIN }} (${{ env.GO_IMAGE }})|" README.md
-          sed -i "s/Runtime base image: .*/Runtime base image: ${{ env.RUNTIME_BASE }}/" README.md
+          sed -i "s|Runtime base image: .*|Runtime base image: ${{ env.RUNTIME_BASE }}|" README.md
 
       - name: Commit and push
         run: |
