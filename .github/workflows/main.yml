@@ -223,6 +223,9 @@ jobs:
                 unset GOARM
               fi
 
+              # Allow git operations inside the container to access the mounted repo
+              git config --global --add safe.directory /work/coredns
+
               echo "Building for GOOS=${GOOS}, GOARCH=${GOARCH}, GOARM=${GOARM:-n/a}"
               make coredns
             '
