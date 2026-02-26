@@ -293,6 +293,8 @@ jobs:
           context: build-context/
           file: build-context/Dockerfile
           push: true
+          provenance: false
+          sbom: false
           platforms: ${{ matrix.platform }}
           build-args: |
             BASE=${{ env.RUNTIME_BASE }}
@@ -323,6 +325,9 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
       - name: Compute floating tags
         id: tags
         run: |
@@ -330,61 +335,33 @@ jobs:
           echo "minor_tag=${MINOR_TAG}" >> $GITHUB_OUTPUT
           echo "Floating tags: v${{ env.VERSION }}, ${MINOR_TAG}, v2, latest"
 
-      - name: Create and push manifest – v${{ env.VERSION }}
+      - name: Create and push multi-arch tags
         run: |
-          docker manifest create --amend tomtonic/coredns-fanout:v${{ env.VERSION }} \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-amd64 \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-arm64 \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-armhf
-          docker manifest annotate tomtonic/coredns-fanout:v${{ env.VERSION }} \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-amd64 --os linux --arch amd64
-          docker manifest annotate tomtonic/coredns-fanout:v${{ env.VERSION }} \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-arm64 --os linux --arch arm64
-          docker manifest annotate tomtonic/coredns-fanout:v${{ env.VERSION }} \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-armhf --os linux --arch arm --variant v7
-          docker manifest push tomtonic/coredns-fanout:v${{ env.VERSION }}
+          SOURCE_AMD64="tomtonic/coredns-fanout:v${{ env.VERSION }}-amd64"
+          SOURCE_ARM64="tomtonic/coredns-fanout:v${{ env.VERSION }}-arm64"
+          SOURCE_ARMHF="tomtonic/coredns-fanout:v${{ env.VERSION }}-armhf"
 
-      - name: Create and push manifest – ${{ steps.tags.outputs.minor_tag }}
-        run: |
-          docker manifest create --amend tomtonic/coredns-fanout:${{ steps.tags.outputs.minor_tag }} \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-amd64 \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-arm64 \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-armhf
-          docker manifest annotate tomtonic/coredns-fanout:${{ steps.tags.outputs.minor_tag }} \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-amd64 --os linux --arch amd64
-          docker manifest annotate tomtonic/coredns-fanout:${{ steps.tags.outputs.minor_tag }} \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-arm64 --os linux --arch arm64
-          docker manifest annotate tomtonic/coredns-fanout:${{ steps.tags.outputs.minor_tag }} \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-armhf --os linux --arch arm --variant v7
-          docker manifest push tomtonic/coredns-fanout:${{ steps.tags.outputs.minor_tag }}
+          docker buildx imagetools create \
+            --tag tomtonic/coredns-fanout:v${{ env.VERSION }} \
+            "${SOURCE_AMD64}" "${SOURCE_ARM64}" "${SOURCE_ARMHF}"
+          docker buildx imagetools inspect tomtonic/coredns-fanout:v${{ env.VERSION }}
 
-      - name: Create and push manifest – v2
-        run: |
-          docker manifest create --amend tomtonic/coredns-fanout:v2 \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-amd64 \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-arm64 \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-armhf
-          docker manifest annotate tomtonic/coredns-fanout:v2 \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-amd64 --os linux --arch amd64
-          docker manifest annotate tomtonic/coredns-fanout:v2 \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-arm64 --os linux --arch arm64
-          docker manifest annotate tomtonic/coredns-fanout:v2 \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-armhf --os linux --arch arm --variant v7
-          docker manifest push tomtonic/coredns-fanout:v2
+          docker buildx imagetools create \
+            --tag tomtonic/coredns-fanout:${{ steps.tags.outputs.minor_tag }} \
+            "${SOURCE_AMD64}" "${SOURCE_ARM64}" "${SOURCE_ARMHF}"
+          docker buildx imagetools inspect tomtonic/coredns-fanout:${{ steps.tags.outputs.minor_tag }}
 
-      - name: Create and push manifest – latest
-        run: |
-          docker manifest create --amend tomtonic/coredns-fanout:latest \
+          docker buildx imagetools create \
+            --tag tomtonic/coredns-fanout:v2 \
+            "${SOURCE_AMD64}" "${SOURCE_ARM64}" "${SOURCE_ARMHF}"
+          docker buildx imagetools inspect tomtonic/coredns-fanout:v2
+
+          docker buildx imagetools create \
+            --tag tomtonic/coredns-fanout:latest \
             tomtonic/coredns-fanout:v${{ env.VERSION }}-amd64 \
             tomtonic/coredns-fanout:v${{ env.VERSION }}-arm64 \
             tomtonic/coredns-fanout:v${{ env.VERSION }}-armhf
-          docker manifest annotate tomtonic/coredns-fanout:latest \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-amd64 --os linux --arch amd64
-          docker manifest annotate tomtonic/coredns-fanout:latest \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-arm64 --os linux --arch arm64
-          docker manifest annotate tomtonic/coredns-fanout:latest \
-            tomtonic/coredns-fanout:v${{ env.VERSION }}-armhf --os linux --arch arm --variant v7
-          docker manifest push tomtonic/coredns-fanout:latest
+          docker buildx imagetools inspect tomtonic/coredns-fanout:latest
 
   # ---------------------------------------------------------------------------
   # Job 5: Commit version.json and README *after* a successful build & push.
