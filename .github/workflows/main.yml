@@ -1,98 +1,177 @@
 name: Auto-Build CoreDNS with Fanout
+
 on:
   schedule:
     - cron: 0 0 * * *  # runs daily at midnight
   workflow_dispatch:  # Manual execution allowed
 
+# Prevent concurrent builds from racing on version.json
+concurrency:
+  group: build
+  cancel-in-progress: false
+
 jobs:
-  # This job retrieves the latest release tags from CoreDNS and Fanout,
-  # and then combines them (e.g. "v1.12.1-v1.11.3") to be used as part
-  # of the Docker image tag.
-  get-release-tags:
-    name: Get Combined Release Tags
+  # ---------------------------------------------------------------------------
+  # Job 1: Determine whether a build is needed and compute the new version.
+  #
+  # Versioning rules (SemVer v2.MINOR.PATCH):
+  #   - CoreDNS or Fanout MINOR version change  ->  bump our MINOR, reset PATCH
+  #   - CoreDNS/Fanout PATCH, Go build image, or runtime base image change  ->  bump our PATCH
+  #   - Source of truth for dependency versions: build-versions.json
+  #   - Nothing changed  ->  skip (unless workflow_dispatch)
+  # ---------------------------------------------------------------------------
+  determine-version:
+    name: Determine Version
     runs-on: ubuntu-latest
     outputs:
-      combined_release: ${{ steps.combine.outputs.combined_release }}
+      build_needed: ${{ steps.version.outputs.build_needed }}
+      new_version: ${{ steps.version.outputs.new_version }}
+      coredns_tag: ${{ steps.deps.outputs.coredns_tag }}
+      fanout_tag: ${{ steps.deps.outputs.fanout_tag }}
+      go_image: ${{ steps.deps.outputs.go_image }}
+      go_toolchain: ${{ steps.deps.outputs.go_toolchain }}
+      runtime_base: ${{ steps.deps.outputs.runtime_base }}
     permissions:
-      contents: write  # Needed to push changes
+      contents: read
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
         with:
           egress-policy: audit
 
-      - name: Get Latest CoreDNS Release Tag
-        id: coredns_release
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        with:
-          script: |
-            // Call GitHub API to get the latest release for CoreDNS
-            const { data } = await github.rest.repos.getLatestRelease({
-              owner: 'coredns',
-              repo: 'coredns'
-            });
-            core.setOutput('tag', data.tag_name);
-
-      - name: Get Latest Fanout Release Tag
-        id: fanout_release
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        with:
-          script: |
-            // Call GitHub API to get the latest release for Fanout
-            const { data } = await github.rest.repos.getLatestRelease({
-              owner: 'networkservicemesh',
-              repo: 'fanout'
-            });
-            core.setOutput('tag', data.tag_name);
-
-      - name: Combine Release Tags
-        id: combine
-        run: |
-          # Combine both tags with a hyphen separator (e.g. "v1.12.1-v1.11.3")
-          COMBINED_RELEASE_TAG="${{ steps.coredns_release.outputs.tag }}-${{ steps.fanout_release.outputs.tag }}"
-          echo "Combined Release Tag: ${COMBINED_RELEASE_TAG}"
-          echo "combined_release=${COMBINED_RELEASE_TAG}" >> $GITHUB_OUTPUT
-
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0  # Needed for pushing
 
-      - name: Update README.md with latest release tag
-        id: update_readme
+      - name: Load pinned dependency versions
+        id: deps
         run: |
-          echo "Updating README with latest release tag..."
-          # Update the README.md file with the combined release tag
-          DATE_UTC=$(date -u +"%d.%m.%Y %H:%M UTC")
-          sed -i "s/Latest release lookup: .*/Latest release lookup: $DATE_UTC/" README.md
-          sed -i "s/Latest CoreDNS release: .*/Latest CoreDNS release: ${{ steps.coredns_release.outputs.tag }}/" README.md
-          sed -i "s/Latest Fanout release: .*/Latest Fanout release: ${{ steps.fanout_release.outputs.tag }}/" README.md
-          sed -i "s/Release tag for coredns-fanout Docker image: .*/Release tag for coredns-fanout Docker image: ${{ steps.coredns_release.outputs.tag }}-${{ steps.fanout_release.outputs.tag }}/" README.md
-          echo "README.md updated with latest release tag. Pushing changes..."
-          git config --global user.name "GitHub Action Auto-Build"
-          git config --global user.email "action@github.com"
-          git add README.md
-          git commit -m "Update release info [auto]" || echo "No changes to commit"
-          git push origin main
-          echo "README.md updated with latest release tag."
+          FILE="build-versions.json"
+          test -f "${FILE}"
 
-  # This job builds the Go binary and Docker image for each architecture.
-  # The matrix strategy runs one job for "amd64" and another for "arm64".
+          COREDNS_TAG=$(jq -r '.coredns_tag // ""' "${FILE}")
+          FANOUT_TAG=$(jq -r '.fanout_tag // ""' "${FILE}")
+          GO_IMAGE=$(jq -r '.go_image // ""' "${FILE}")
+          GO_TOOLCHAIN=$(jq -r '.go_toolchain // ""' "${FILE}")
+          RUNTIME_BASE=$(jq -r '.runtime_base // ""' "${FILE}")
+
+          if [ -z "${COREDNS_TAG}" ] || [ -z "${FANOUT_TAG}" ] || [ -z "${GO_IMAGE}" ] || [ -z "${GO_TOOLCHAIN}" ] || [ -z "${RUNTIME_BASE}" ]; then
+            echo "${FILE} is missing required values." >&2
+            exit 1
+          fi
+
+          echo "coredns_tag=${COREDNS_TAG}" >> $GITHUB_OUTPUT
+          echo "fanout_tag=${FANOUT_TAG}" >> $GITHUB_OUTPUT
+          echo "go_image=${GO_IMAGE}" >> $GITHUB_OUTPUT
+          echo "go_toolchain=${GO_TOOLCHAIN}" >> $GITHUB_OUTPUT
+          echo "runtime_base=${RUNTIME_BASE}" >> $GITHUB_OUTPUT
+
+          echo "Pinned CoreDNS tag: ${COREDNS_TAG}"
+          echo "Pinned Fanout tag: ${FANOUT_TAG}"
+          echo "Pinned Go build image: ${GO_IMAGE}"
+          echo "Pinned Go toolchain: ${GO_TOOLCHAIN}"
+          echo "Pinned runtime base image: ${RUNTIME_BASE}"
+
+      - name: Determine version bump
+        id: version
+        run: |
+          NEW_COREDNS="${{ steps.deps.outputs.coredns_tag }}"
+          NEW_FANOUT="${{ steps.deps.outputs.fanout_tag }}"
+          NEW_GO_IMAGE="${{ steps.deps.outputs.go_image }}"
+          NEW_RUNTIME_BASE="${{ steps.deps.outputs.runtime_base }}"
+
+          STORED_COREDNS=$(jq -r '.coredns // ""' version.json)
+          STORED_FANOUT=$(jq  -r '.fanout  // ""' version.json)
+          STORED_GO_IMAGE=$(jq -r '.go      // ""' version.json)
+          STORED_RUNTIME_BASE=$(jq -r '.alpine  // ""' version.json)
+          STORED_VERSION=$(jq -r '.version // "2.0.0"' version.json)
+
+          echo "Stored: coredns=${STORED_COREDNS} fanout=${STORED_FANOUT} go_image=${STORED_GO_IMAGE} runtime_base=${STORED_RUNTIME_BASE} version=${STORED_VERSION}"
+          echo "Latest: coredns=${NEW_COREDNS} fanout=${NEW_FANOUT} go_image=${NEW_GO_IMAGE} runtime_base=${NEW_RUNTIME_BASE}"
+
+          # --- nothing changed? ---
+          if [ "${NEW_COREDNS}" = "${STORED_COREDNS}" ] && \
+             [ "${NEW_FANOUT}"  = "${STORED_FANOUT}"  ] && \
+             [ "${NEW_GO_IMAGE}" = "${STORED_GO_IMAGE}" ] && \
+             [ "${NEW_RUNTIME_BASE}" = "${STORED_RUNTIME_BASE}" ]; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              echo "No dependency changes, but manual trigger – rebuilding ${STORED_VERSION}."
+              echo "build_needed=true"             >> $GITHUB_OUTPUT
+              echo "new_version=${STORED_VERSION}"  >> $GITHUB_OUTPUT
+            else
+              echo "No changes detected. Skipping build."
+              echo "build_needed=false"            >> $GITHUB_OUTPUT
+              echo "new_version=${STORED_VERSION}"  >> $GITHUB_OUTPUT
+            fi
+            exit 0
+          fi
+
+          # --- initial build (stored deps empty) -> use 2.0.0 as-is ---
+          if [ -z "${STORED_COREDNS}" ] || [ -z "${STORED_FANOUT}" ]; then
+            echo "Initial build – using version 2.0.0"
+            echo "build_needed=true"  >> $GITHUB_OUTPUT
+            echo "new_version=2.0.0"  >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # --- compute version bump ---
+          MAJOR=$(echo "${STORED_VERSION}" | cut -d. -f1)
+          MINOR=$(echo "${STORED_VERSION}" | cut -d. -f2)
+          PATCH=$(echo "${STORED_VERSION}" | cut -d. -f3)
+
+          # Extract minor components of CoreDNS / Fanout (e.g. v1.14.1 -> 14)
+          OLD_CD_MINOR=$(echo "${STORED_COREDNS}" | sed 's/^v//' | cut -d. -f2)
+          NEW_CD_MINOR=$(echo "${NEW_COREDNS}"    | sed 's/^v//' | cut -d. -f2)
+          OLD_FO_MINOR=$(echo "${STORED_FANOUT}"  | sed 's/^v//' | cut -d. -f2)
+          NEW_FO_MINOR=$(echo "${NEW_FANOUT}"     | sed 's/^v//' | cut -d. -f2)
+
+          if [ "${OLD_CD_MINOR}" != "${NEW_CD_MINOR}" ] || \
+             [ "${OLD_FO_MINOR}" != "${NEW_FO_MINOR}" ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+            echo "Minor bump (CoreDNS or Fanout minor version changed)"
+          else
+            PATCH=$((PATCH + 1))
+            echo "Patch bump (patch / Go image / runtime base image change)"
+          fi
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "New version: v${NEW_VERSION}"
+          echo "build_needed=true"           >> $GITHUB_OUTPUT
+          echo "new_version=${NEW_VERSION}"  >> $GITHUB_OUTPUT
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Build the Go binary and Docker image for each architecture.
+  # ---------------------------------------------------------------------------
   build:
-    name: Build and Push Docker Images
-    needs: get-release-tags
+    name: Build (${{ matrix.arch }})
+    needs: determine-version
+    if: needs.determine-version.outputs.build_needed == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       security-events: write
     strategy:
       matrix:
-        arch:
-          - amd64
-          - arm64
-          - armhf
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            goarch: amd64
+            goarm: ""
+          - arch: arm64
+            platform: linux/arm64
+            goarch: arm64
+            goarm: ""
+          - arch: armhf
+            platform: linux/arm/v7
+            goarch: arm
+            goarm: "7"
     env:
-      COMBINED_RELEASE_TAG: ${{ needs.get-release-tags.outputs.combined_release }}
+      VERSION: ${{ needs.determine-version.outputs.new_version }}
+      COREDNS_TAG: ${{ needs.determine-version.outputs.coredns_tag }}
+      FANOUT_TAG: ${{ needs.determine-version.outputs.fanout_tag }}
+      GO_IMAGE: ${{ needs.determine-version.outputs.go_image }}
+      GO_TOOLCHAIN: ${{ needs.determine-version.outputs.go_toolchain }}
+      RUNTIME_BASE: ${{ needs.determine-version.outputs.runtime_base }}
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -100,167 +179,207 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: Abort if tag exists
-        id: check
-        run: |
-          echo "Checking Docker Hub for existing tag..."
-          if docker manifest inspect "tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}-${{ matrix.arch }}" > /dev/null 2>&1; then
-            echo "✅ Tag '${{ env.COMBINED_RELEASE_TAG }}-${{ matrix.arch }}' exists. Skipping..."
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "❌ Tag '${{ env.COMBINED_RELEASE_TAG }}-${{ matrix.arch }}' does not exist. Building image."
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-
       - name: Checkout Repository
-        if: steps.check.outputs.exists != 'true'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Setup Go
-        if: steps.check.outputs.exists != 'true'
-        uses: actions/setup-go@v6
-        with:
-          go-version: 1.25.5
-
       - name: Get CoreDNS & Plugin
-        if: steps.check.outputs.exists != 'true'
         run: |
-          git clone https://github.com/coredns/coredns.git
+          git clone --branch ${{ env.COREDNS_TAG }} --depth 1 https://github.com/coredns/coredns.git
           cd coredns
           echo "fanout:github.com/networkservicemesh/fanout" >> plugin.cfg
 
-      - name: Build CoreDNS for ${{ matrix.arch }}
-        if: steps.check.outputs.exists != 'true'
+      - name: Build CoreDNS in ${{ env.GO_IMAGE }} for ${{ matrix.arch }}
         run: |
-          cd coredns
-
-          # Go can cross-compile, but any build step that runs a generated binary (like code generators or go:generate) must be compiled for and run on the build host architecture.
-          make gen
-
-          # Only set GOARCH/GOARM/GOOS for the final build step, not for generation steps.
-          export GOOS=linux
-          if [ "${{ matrix.arch }}" = "armhf" ]; then
-            export GOARCH=arm
-            export GOARM=7
-          else
-            export GOARCH=${{ matrix.arch }}
+          RUN_TESTS=0
+          if [ "${{ matrix.arch }}" = "amd64" ]; then
+            RUN_TESTS=1
           fi
-          echo "GOOS=${GOOS}, GOARCH=${GOARCH}, GOARM=${GOARM}"
-          make coredns
 
-#      - name: Gosec Scan
-#        if: steps.check.outputs.exists != 'true'
-#        run: |
-#          cd coredns
-#          go install github.com/securego/gosec/v2/cmd/gosec@latest
-#          gosec ./...
+          docker run --rm \
+            -v "${{ github.workspace }}:/work" \
+            -w /work/coredns \
+            -e GOOS=linux \
+            -e GOARCH=${{ matrix.goarch }} \
+            -e GOARM=${{ matrix.goarm }} \
+            -e FANOUT_TAG=${{ env.FANOUT_TAG }} \
+            -e RUN_TESTS=${RUN_TESTS} \
+            ${{ env.GO_IMAGE }} \
+            sh -ec '
+              apt-get -qq update
+              apt-get -qq install --no-install-recommends make git gcc libc6-dev ca-certificates
+              rm -rf /var/lib/apt/lists/*
+              go mod edit -require github.com/networkservicemesh/fanout@${FANOUT_TAG}
+              go mod tidy
+              make gen
+              if [ "${RUN_TESTS}" = "1" ]; then
+                go test ./...
+              fi
+              echo "Building for GOOS=${GOOS}, GOARCH=${GOARCH}, GOARM=${GOARM:-n/a}"
+              make coredns
+            '
 
-      - name: Run Trivy vulnerability scanner in repo mode
-        if: steps.check.outputs.exists != 'true'
-        uses: aquasecurity/trivy-action@0.34.0
-        with:
-          scan-type: fs
-          scan-ref: ./coredns
-          format: sarif
-          output: trivy-results.sarif
-          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
-
-      - name: Upload Trivy scan results to GitHub Security tab
-        if: steps.check.outputs.exists != 'true'
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-results.sarif
-
-      - name: Run Trivy in GitHub SBOM mode and submit results to Dependency Graph
-        if: steps.check.outputs.exists != 'true'
-        uses: aquasecurity/trivy-action@0.34.0
-        with:
-          scan-type: fs
-          scan-ref: ./coredns
-          format: github
-          output: dependency-results.sbom.json
-          github-pat: ${{ secrets.GITHUB_TOKEN }}
-
-      # Set up BuildKit Docker container builder to be able to build
-      # multi-platform images and export cache
-      # https://github.com/docker/setup-buildx-action
       - name: Set up Docker Buildx
-        if: steps.check.outputs.exists != 'true'
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to Docker Hub
-        if: steps.check.outputs.exists != 'true'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push Docker image
-        if: steps.check.outputs.exists != 'true'
-        id: push
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: coredns/
           file: coredns/Dockerfile
           push: true
-          # Build for the target platform. In this case, our Dockerfile simply copies the precompiled binary.
-          platforms: "linux/${{ matrix.arch }}"
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            BASE=${{ env.RUNTIME_BASE }}
           tags: |
-            tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}-${{ matrix.arch }}
-            tomtonic/coredns-fanout:latest-${{ matrix.arch }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-${{ matrix.arch }}
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,scope=${{ matrix.arch }},mode=max
 
   # ---------------------------------------------------------------------------
-  # Job: Create and Push Manifest (Multi-Arch Image)
-  # In this job the separate architecture-specific images are combined
-  # into a multi-arch manifest so that a single tag (without an arch suffix)
-  # can be used to pull the appropriate image automatically.
+  # Job 3: Create multi-arch manifests and push floating tags.
+  # Tags pushed: v2.MINOR.PATCH, v2.MINOR, v2, latest
   # ---------------------------------------------------------------------------
-#  manifest:
-#    name: Create and Push Docker Manifest
-#    needs: [build, get-release-tags] # get-release-tags also needs to be mentioned here to be able to access its OUTPUT, i.e., access needs.get-release-tags.outputs.combined_release below
-#    runs-on: ubuntu-latest
-#    env:
-#      COMBINED_RELEASE_TAG: ${{ needs.get-release-tags.outputs.combined_release }}
-#    steps:
-#      - name: Log in to Docker Hub
-#        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
-#        with:
-#          username: ${{ vars.DOCKERHUB_USERNAME }}
-#          password: ${{ secrets.DOCKERHUB_TOKEN }}
-#
-#      - name: Create and Push Manifest for Release Tag
-#        run: |
-#          echo "Creating manifest for tag: ${{ env.COMBINED_RELEASE_TAG }}"
-#          # Create a manifest list that includes both architecture-specific images.
-#          docker manifest create --amend tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }} \
-#            tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}-amd64 \
-#            tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}-arm64
-#
-#          # Annotate the images to specify the architecture.
-#          docker manifest annotate tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }} \
-#            tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}-amd64 --os linux --arch amd64
-#
-#          docker manifest annotate tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }} \
-#            tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}-arm64 --os linux --arch arm64
-#
-#          # Push the multi-arch manifest so that pulling this tag selects the correct image.
-#          docker manifest push tomtonic/coredns-fanout:${{ env.COMBINED_RELEASE_TAG }}
-#
-#      - name: Create and Push Manifest for "latest" Tag
-#        run: |
-#          echo "Creating manifest for tag: latest"
-#          # Optionally, create a "latest" manifest pointing to the same images.
-#          docker manifest create --amend tomtonic/coredns-fanout:latest \
-#            tomtonic/coredns-fanout:latest-amd64 \
-#            tomtonic/coredns-fanout:latest-arm64
-#
-#          docker manifest annotate tomtonic/coredns-fanout:latest \
-#            tomtonic/coredns-fanout:latest-amd64 --os linux --arch amd64
-#
-#          docker manifest annotate tomtonic/coredns-fanout:latest \
-#            tomtonic/coredns-fanout:latest-arm64 --os linux --arch arm64
-#
-#          docker manifest push tomtonic/coredns-fanout:latest
-#
+  manifest:
+    name: Create Multi-Arch Manifests
+    needs: [build, determine-version]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.determine-version.outputs.new_version }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        with:
+          egress-policy: audit
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Compute floating tags
+        id: tags
+        run: |
+          MINOR_TAG="v$(echo "${{ env.VERSION }}" | cut -d. -f1-2)"
+          echo "minor_tag=${MINOR_TAG}" >> $GITHUB_OUTPUT
+          echo "Floating tags: v${{ env.VERSION }}, ${MINOR_TAG}, v2, latest"
+
+      - name: Create and push manifest – v${{ env.VERSION }}
+        run: |
+          docker manifest create --amend tomtonic/coredns-fanout:v${{ env.VERSION }} \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-amd64 \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-arm64 \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-armhf
+          docker manifest annotate tomtonic/coredns-fanout:v${{ env.VERSION }} \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-amd64 --os linux --arch amd64
+          docker manifest annotate tomtonic/coredns-fanout:v${{ env.VERSION }} \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-arm64 --os linux --arch arm64
+          docker manifest annotate tomtonic/coredns-fanout:v${{ env.VERSION }} \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-armhf --os linux --arch arm --variant v7
+          docker manifest push tomtonic/coredns-fanout:v${{ env.VERSION }}
+
+      - name: Create and push manifest – ${{ steps.tags.outputs.minor_tag }}
+        run: |
+          docker manifest create --amend tomtonic/coredns-fanout:${{ steps.tags.outputs.minor_tag }} \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-amd64 \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-arm64 \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-armhf
+          docker manifest annotate tomtonic/coredns-fanout:${{ steps.tags.outputs.minor_tag }} \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-amd64 --os linux --arch amd64
+          docker manifest annotate tomtonic/coredns-fanout:${{ steps.tags.outputs.minor_tag }} \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-arm64 --os linux --arch arm64
+          docker manifest annotate tomtonic/coredns-fanout:${{ steps.tags.outputs.minor_tag }} \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-armhf --os linux --arch arm --variant v7
+          docker manifest push tomtonic/coredns-fanout:${{ steps.tags.outputs.minor_tag }}
+
+      - name: Create and push manifest – v2
+        run: |
+          docker manifest create --amend tomtonic/coredns-fanout:v2 \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-amd64 \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-arm64 \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-armhf
+          docker manifest annotate tomtonic/coredns-fanout:v2 \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-amd64 --os linux --arch amd64
+          docker manifest annotate tomtonic/coredns-fanout:v2 \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-arm64 --os linux --arch arm64
+          docker manifest annotate tomtonic/coredns-fanout:v2 \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-armhf --os linux --arch arm --variant v7
+          docker manifest push tomtonic/coredns-fanout:v2
+
+      - name: Create and push manifest – latest
+        run: |
+          docker manifest create --amend tomtonic/coredns-fanout:latest \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-amd64 \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-arm64 \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-armhf
+          docker manifest annotate tomtonic/coredns-fanout:latest \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-amd64 --os linux --arch amd64
+          docker manifest annotate tomtonic/coredns-fanout:latest \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-arm64 --os linux --arch arm64
+          docker manifest annotate tomtonic/coredns-fanout:latest \
+            tomtonic/coredns-fanout:v${{ env.VERSION }}-armhf --os linux --arch arm --variant v7
+          docker manifest push tomtonic/coredns-fanout:latest
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Commit version.json and README *after* a successful build & push.
+  # This ensures the stored state only advances when images actually exist.
+  # ---------------------------------------------------------------------------
+  finalize:
+    name: Update Version Tracking
+    needs: [manifest, determine-version]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.determine-version.outputs.new_version }}
+      COREDNS_TAG: ${{ needs.determine-version.outputs.coredns_tag }}
+      FANOUT_TAG: ${{ needs.determine-version.outputs.fanout_tag }}
+      GO_IMAGE: ${{ needs.determine-version.outputs.go_image }}
+      GO_TOOLCHAIN: ${{ needs.determine-version.outputs.go_toolchain }}
+      RUNTIME_BASE: ${{ needs.determine-version.outputs.runtime_base }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout Repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Update version.json
+        run: |
+          jq \
+            --arg v "${{ env.VERSION }}" \
+            --arg c "${{ env.COREDNS_TAG }}" \
+            --arg f "${{ env.FANOUT_TAG }}" \
+            --arg g "${{ env.GO_IMAGE }}" \
+            --arg a "${{ env.RUNTIME_BASE }}" \
+            '.version=$v | .coredns=$c | .fanout=$f | .go=$g | .alpine=$a' \
+            version.json > version.json.tmp
+          mv version.json.tmp version.json
+
+      - name: Update README.md
+        run: |
+          DATE_UTC=$(date -u +"%d.%m.%Y %H:%M UTC")
+          sed -i "s/coredns-fanout version: .*/coredns-fanout version: v${{ env.VERSION }}/" README.md
+          sed -i "s/Latest release lookup: .*/Latest release lookup: ${DATE_UTC}/" README.md
+          sed -i "s/Latest CoreDNS release: .*/Latest CoreDNS release: ${{ env.COREDNS_TAG }}/" README.md
+          sed -i "s/Latest Fanout release: .*/Latest Fanout release: ${{ env.FANOUT_TAG }}/" README.md
+          sed -i "s|Go toolchain: .*|Go toolchain: ${{ env.GO_TOOLCHAIN }} (${{ env.GO_IMAGE }})|" README.md
+          sed -i "s/Runtime base image: .*/Runtime base image: ${{ env.RUNTIME_BASE }}/" README.md
+
+      - name: Commit and push
+        run: |
+          git config --global user.name "GitHub Action Auto-Build"
+          git config --global user.email "action@github.com"
+          git add version.json README.md
+          git commit -m "Release v${{ env.VERSION }} [auto]" || echo "No changes to commit"
+          git push origin main

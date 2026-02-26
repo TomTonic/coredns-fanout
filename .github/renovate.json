@@ -1,0 +1,57 @@
+{
+  "extends": ["config:recommended"],
+  "timezone": "Europe/Berlin",
+  "schedule": ["* 16 * * 1,3,5"],
+  "automerge": false,
+  "enabledManagers": ["github-actions", "custom.regex"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["^build-versions\\.json$"],
+      "matchStrings": [
+        "\"coredns_tag\"\\s*:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "coredns/coredns",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["^build-versions\\.json$"],
+      "matchStrings": [
+        "\"fanout_tag\"\\s*:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "networkservicemesh/fanout",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["^build-versions\\.json$"],
+      "matchStrings": [
+        "\"go_image\"\\s*:\\s*\"(?<depName>docker\\.io/library/golang)(?::(?<currentValue>[^\"@]+))?(?:@(?<currentDigest>sha256:[a-f0-9]+))?\""
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["^build-versions\\.json$"],
+      "matchStrings": [
+        "\"runtime_base\"\\s*:\\s*\"(?<depName>gcr\\.io/distroless/static-debian12):(?<currentValue>[^\"@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?\""
+      ],
+      "datasourceTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchManagers": ["custom.regex"],
+      "pinDigests": true
+    },
+    {
+      "description": "Auto-merge patch and digest updates only",
+      "matchUpdateTypes": ["patch", "digest"],
+      "automerge": true,
+      "automergeType": "pr"
+    }
+  ]
+}
