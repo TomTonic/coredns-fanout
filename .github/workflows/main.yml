@@ -194,11 +194,15 @@ jobs:
             -v "${{ github.workspace }}:/work" \
             -w /work/coredns \
             -e FANOUT_TAG=${{ env.FANOUT_TAG }} \
+            -e GOFLAGS=-buildvcs=false \
             ${{ env.GO_IMAGE }} \
             sh -ec '
               apt-get -qq update
               apt-get -qq install --no-install-recommends make git gcc libc6-dev ca-certificates
               rm -rf /var/lib/apt/lists/*
+
+              # Allow git operations inside the container to access the mounted repo
+              git config --global --add safe.directory /work/coredns
 
               go mod edit -require github.com/networkservicemesh/fanout@${FANOUT_TAG}
               go mod tidy
@@ -206,9 +210,6 @@ jobs:
               make gen
               # Skip upstream integration tests that are known to be flaky in CI containers.
               go test $(go list ./... | grep -v "^github.com/coredns/coredns/test$")
-
-              # Allow git operations inside the container to access the mounted repo
-              git config --global --add safe.directory /work/coredns
 
               mkdir -p /work/artifacts
 
