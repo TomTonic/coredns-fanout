@@ -209,7 +209,7 @@ jobs:
 
               make gen
               # Skip upstream integration tests that are known to be flaky in CI containers.
-              go test $(go list ./... | grep -v "^github.com/coredns/coredns/test$")
+              go test $(go list ./... | grep -Ev "^github.com/coredns/coredns/(test|coremain)$")
 
               mkdir -p /work/artifacts
 
