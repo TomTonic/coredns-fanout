@@ -8,15 +8,15 @@ Pinned dependency versions for deterministic builds are managed in `build-versio
 
 coredns-fanout version: v2.0.0
 
-Latest release lookup: 26.02.2026 00:32 UTC
+Latest release lookup: 26.02.2026 20:11 UTC
 
 Latest CoreDNS release: v1.14.1
 
 Latest Fanout release: v1.11.3
 
-Go toolchain: (pending first v2 build)
+Go toolchain: go1.26.0 linux/amd64 (docker.io/library/golang:1.26-bookworm@sha256:2a0ba12e116687098780d3ce700f9ce3cb340783779646aafbabed748fa6677c)
 
-Runtime base image: (pending first v2 build)
+Runtime base image: gcr.io/distroless/static-debian12:nonroot@sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1
 
 ## How to install
 
