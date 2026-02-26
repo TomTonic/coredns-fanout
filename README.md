@@ -8,7 +8,7 @@ Pinned dependency versions for deterministic builds are managed in `build-versio
 
 coredns-fanout version: v2.0.0
 
-Latest release lookup: 24.02.2026 00:33 UTC
+Latest release lookup: 26.02.2026 00:32 UTC
 
 Latest CoreDNS release: v1.14.1
 
