@@ -16,7 +16,8 @@ jobs:
   #
   # Versioning rules (SemVer v2.MINOR.PATCH):
   #   - CoreDNS or Fanout MINOR version change  ->  bump our MINOR, reset PATCH
-  #   - CoreDNS/Fanout PATCH, Go, or Alpine change  ->  bump our PATCH
+  #   - CoreDNS/Fanout PATCH, Go build image, or runtime base image change  ->  bump our PATCH
+  #   - Source of truth for dependency versions: build-versions.json
   #   - Nothing changed  ->  skip (unless workflow_dispatch)
   # ---------------------------------------------------------------------------
   determine-version:
@@ -27,8 +28,9 @@ jobs:
       new_version: ${{ steps.version.outputs.new_version }}
       coredns_tag: ${{ steps.deps.outputs.coredns_tag }}
       fanout_tag: ${{ steps.deps.outputs.fanout_tag }}
-      go_version: ${{ steps.deps.outputs.go_version }}
-      alpine_version: ${{ steps.deps.outputs.alpine_version }}
+      go_image: ${{ steps.deps.outputs.go_image }}
+      go_toolchain: ${{ steps.deps.outputs.go_toolchain }}
+      runtime_base: ${{ steps.deps.outputs.runtime_base }}
     permissions:
       contents: read
     steps:
@@ -40,68 +42,57 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Get Latest CoreDNS Release Tag
-        id: coredns_release
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        with:
-          script: |
-            const { data } = await github.rest.repos.getLatestRelease({
-              owner: 'coredns',
-              repo: 'coredns'
-            });
-            core.setOutput('tag', data.tag_name);
-
-      - name: Get Latest Fanout Release Tag
-        id: fanout_release
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        with:
-          script: |
-            const { data } = await github.rest.repos.getLatestRelease({
-              owner: 'networkservicemesh',
-              repo: 'fanout'
-            });
-            core.setOutput('tag', data.tag_name);
-
-      - name: Fetch latest Go and Alpine versions
+      - name: Load pinned dependency versions
         id: deps
         run: |
-          # Pass through GitHub API results
-          echo "coredns_tag=${{ steps.coredns_release.outputs.tag }}" >> $GITHUB_OUTPUT
-          echo "fanout_tag=${{ steps.fanout_release.outputs.tag }}" >> $GITHUB_OUTPUT
+          FILE="build-versions.json"
+          test -f "${FILE}"
 
-          # Latest stable Go version from go.dev
-          GO_VERSION=$(curl -sf 'https://go.dev/dl/?mode=json' | jq -r '.[0].version' | sed 's/^go//')
-          echo "go_version=${GO_VERSION}" >> $GITHUB_OUTPUT
-          echo "Go: ${GO_VERSION}"
+          COREDNS_TAG=$(jq -r '.coredns_tag // ""' "${FILE}")
+          FANOUT_TAG=$(jq -r '.fanout_tag // ""' "${FILE}")
+          GO_IMAGE=$(jq -r '.go_image // ""' "${FILE}")
+          GO_TOOLCHAIN=$(jq -r '.go_toolchain // ""' "${FILE}")
+          RUNTIME_BASE=$(jq -r '.runtime_base // ""' "${FILE}")
 
-          # Latest stable Alpine version from CDN metadata
-          ALPINE_VERSION=$(curl -sf https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/latest-releases.yaml \
-            | grep -m1 'version:' | awk '{print $2}')
-          echo "alpine_version=${ALPINE_VERSION}" >> $GITHUB_OUTPUT
-          echo "Alpine: ${ALPINE_VERSION}"
+          if [ -z "${COREDNS_TAG}" ] || [ -z "${FANOUT_TAG}" ] || [ -z "${GO_IMAGE}" ] || [ -z "${GO_TOOLCHAIN}" ] || [ -z "${RUNTIME_BASE}" ]; then
+            echo "${FILE} is missing required values." >&2
+            exit 1
+          fi
+
+          echo "coredns_tag=${COREDNS_TAG}" >> $GITHUB_OUTPUT
+          echo "fanout_tag=${FANOUT_TAG}" >> $GITHUB_OUTPUT
+          echo "go_image=${GO_IMAGE}" >> $GITHUB_OUTPUT
+          echo "go_toolchain=${GO_TOOLCHAIN}" >> $GITHUB_OUTPUT
+          echo "runtime_base=${RUNTIME_BASE}" >> $GITHUB_OUTPUT
+
+          echo "Pinned CoreDNS tag: ${COREDNS_TAG}"
+          echo "Pinned Fanout tag: ${FANOUT_TAG}"
+          echo "Pinned Go build image: ${GO_IMAGE}"
+          echo "Pinned Go toolchain: ${GO_TOOLCHAIN}"
+          echo "Pinned runtime base image: ${RUNTIME_BASE}"
 
       - name: Determine version bump
         id: version
         run: |
           NEW_COREDNS="${{ steps.deps.outputs.coredns_tag }}"
           NEW_FANOUT="${{ steps.deps.outputs.fanout_tag }}"
-          NEW_GO="${{ steps.deps.outputs.go_version }}"
-          NEW_ALPINE="${{ steps.deps.outputs.alpine_version }}"
+          NEW_GO_IMAGE="${{ steps.deps.outputs.go_image }}"
+          NEW_RUNTIME_BASE="${{ steps.deps.outputs.runtime_base }}"
 
           STORED_COREDNS=$(jq -r '.coredns // ""' version.json)
           STORED_FANOUT=$(jq  -r '.fanout  // ""' version.json)
-          STORED_GO=$(jq      -r '.go      // ""' version.json)
-          STORED_ALPINE=$(jq  -r '.alpine  // ""' version.json)
+          STORED_GO_IMAGE=$(jq -r '.go      // ""' version.json)
+          STORED_RUNTIME_BASE=$(jq -r '.alpine  // ""' version.json)
           STORED_VERSION=$(jq -r '.version // "2.0.0"' version.json)
 
-          echo "Stored: coredns=${STORED_COREDNS} fanout=${STORED_FANOUT} go=${STORED_GO} alpine=${STORED_ALPINE} version=${STORED_VERSION}"
-          echo "Latest: coredns=${NEW_COREDNS} fanout=${NEW_FANOUT} go=${NEW_GO} alpine=${NEW_ALPINE}"
+          echo "Stored: coredns=${STORED_COREDNS} fanout=${STORED_FANOUT} go_image=${STORED_GO_IMAGE} runtime_base=${STORED_RUNTIME_BASE} version=${STORED_VERSION}"
+          echo "Latest: coredns=${NEW_COREDNS} fanout=${NEW_FANOUT} go_image=${NEW_GO_IMAGE} runtime_base=${NEW_RUNTIME_BASE}"
 
           # --- nothing changed? ---
           if [ "${NEW_COREDNS}" = "${STORED_COREDNS}" ] && \
              [ "${NEW_FANOUT}"  = "${STORED_FANOUT}"  ] && \
-             [ "${NEW_GO}"      = "${STORED_GO}"      ] && \
-             [ "${NEW_ALPINE}"  = "${STORED_ALPINE}"  ]; then
+             [ "${NEW_GO_IMAGE}" = "${STORED_GO_IMAGE}" ] && \
+             [ "${NEW_RUNTIME_BASE}" = "${STORED_RUNTIME_BASE}" ]; then
             if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
               echo "No dependency changes, but manual trigger – rebuilding ${STORED_VERSION}."
               echo "build_needed=true"             >> $GITHUB_OUTPUT
@@ -140,7 +131,7 @@ jobs:
             echo "Minor bump (CoreDNS or Fanout minor version changed)"
           else
             PATCH=$((PATCH + 1))
-            echo "Patch bump (patch / Go / Alpine change)"
+            echo "Patch bump (patch / Go image / runtime base image change)"
           fi
 
           NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
@@ -178,8 +169,9 @@ jobs:
       VERSION: ${{ needs.determine-version.outputs.new_version }}
       COREDNS_TAG: ${{ needs.determine-version.outputs.coredns_tag }}
       FANOUT_TAG: ${{ needs.determine-version.outputs.fanout_tag }}
-      GO_VERSION: ${{ needs.determine-version.outputs.go_version }}
-      ALPINE_VERSION: ${{ needs.determine-version.outputs.alpine_version }}
+      GO_IMAGE: ${{ needs.determine-version.outputs.go_image }}
+      GO_TOOLCHAIN: ${{ needs.determine-version.outputs.go_toolchain }}
+      RUNTIME_BASE: ${{ needs.determine-version.outputs.runtime_base }}
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -190,35 +182,41 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
       - name: Get CoreDNS & Plugin
         run: |
           git clone --branch ${{ env.COREDNS_TAG }} --depth 1 https://github.com/coredns/coredns.git
           cd coredns
           echo "fanout:github.com/networkservicemesh/fanout" >> plugin.cfg
 
-      - name: Build CoreDNS for ${{ matrix.arch }}
+      - name: Build CoreDNS in ${{ env.GO_IMAGE }} for ${{ matrix.arch }}
         run: |
-          cd coredns
-
-          # Code generators must run on the host architecture
-          make gen
-
-          # Cross-compile the final binary for the target architecture
-          export GOOS=linux
-          export GOARCH=${{ matrix.goarch }}
-          if [ -n "${{ matrix.goarm }}" ]; then
-            export GOARM=${{ matrix.goarm }}
+          RUN_TESTS=0
+          if [ "${{ matrix.arch }}" = "amd64" ]; then
+            RUN_TESTS=1
           fi
-          echo "Building for GOOS=${GOOS}, GOARCH=${GOARCH}, GOARM=${GOARM:-n/a}"
-          make coredns
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+          docker run --rm \
+            -v "${{ github.workspace }}:/work" \
+            -w /work/coredns \
+            -e GOOS=linux \
+            -e GOARCH=${{ matrix.goarch }} \
+            -e GOARM=${{ matrix.goarm }} \
+            -e FANOUT_TAG=${{ env.FANOUT_TAG }} \
+            -e RUN_TESTS=${RUN_TESTS} \
+            ${{ env.GO_IMAGE }} \
+            sh -ec '
+              apt-get -qq update
+              apt-get -qq install --no-install-recommends make git gcc libc6-dev ca-certificates
+              rm -rf /var/lib/apt/lists/*
+              go mod edit -require github.com/networkservicemesh/fanout@${FANOUT_TAG}
+              go mod tidy
+              make gen
+              if [ "${RUN_TESTS}" = "1" ]; then
+                go test ./...
+              fi
+              echo "Building for GOOS=${GOOS}, GOARCH=${GOARCH}, GOARM=${GOARM:-n/a}"
+              make coredns
+            '
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
@@ -229,21 +227,15 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Prepare build context
-        run: |
-          mkdir -p build-context
-          cp coredns/coredns build-context/
-          cp Dockerfile build-context/
-
       - name: Build and push Docker image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
-          context: build-context/
-          file: build-context/Dockerfile
+          context: coredns/
+          file: coredns/Dockerfile
           push: true
           platforms: ${{ matrix.platform }}
           build-args: |
-            ALPINE_VERSION=${{ env.ALPINE_VERSION }}
+            BASE=${{ env.RUNTIME_BASE }}
           tags: |
             tomtonic/coredns-fanout:v${{ env.VERSION }}-${{ matrix.arch }}
           cache-from: type=gha,scope=${{ matrix.arch }}
@@ -348,8 +340,9 @@ jobs:
       VERSION: ${{ needs.determine-version.outputs.new_version }}
       COREDNS_TAG: ${{ needs.determine-version.outputs.coredns_tag }}
       FANOUT_TAG: ${{ needs.determine-version.outputs.fanout_tag }}
-      GO_VERSION: ${{ needs.determine-version.outputs.go_version }}
-      ALPINE_VERSION: ${{ needs.determine-version.outputs.alpine_version }}
+      GO_IMAGE: ${{ needs.determine-version.outputs.go_image }}
+      GO_TOOLCHAIN: ${{ needs.determine-version.outputs.go_toolchain }}
+      RUNTIME_BASE: ${{ needs.determine-version.outputs.runtime_base }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
@@ -367,8 +360,8 @@ jobs:
             --arg v "${{ env.VERSION }}" \
             --arg c "${{ env.COREDNS_TAG }}" \
             --arg f "${{ env.FANOUT_TAG }}" \
-            --arg g "${{ env.GO_VERSION }}" \
-            --arg a "${{ env.ALPINE_VERSION }}" \
+            --arg g "${{ env.GO_IMAGE }}" \
+            --arg a "${{ env.RUNTIME_BASE }}" \
             '.version=$v | .coredns=$c | .fanout=$f | .go=$g | .alpine=$a' \
             version.json > version.json.tmp
           mv version.json.tmp version.json
@@ -380,8 +373,9 @@ jobs:
           sed -i "s/Latest release lookup: .*/Latest release lookup: ${DATE_UTC}/" README.md
           sed -i "s/Latest CoreDNS release: .*/Latest CoreDNS release: ${{ env.COREDNS_TAG }}/" README.md
           sed -i "s/Latest Fanout release: .*/Latest Fanout release: ${{ env.FANOUT_TAG }}/" README.md
-          sed -i "s/Go toolchain: .*/Go toolchain: ${{ env.GO_VERSION }}/" README.md
-          sed -i "s/Alpine version: .*/Alpine version: ${{ env.ALPINE_VERSION }}/" README.md
+          sed -i "s|Go toolchain: .*|Go toolchain: ${{ env.GO_TOOLCHAIN }} (${{ env.GO_IMAGE }})|" README.md
+          sed -i "s/Alpine version: .*/Runtime base image: ${{ env.RUNTIME_BASE }}/" README.md
+          sed -i "s/Runtime base image: .*/Runtime base image: ${{ env.RUNTIME_BASE }}/" README.md
 
       - name: Commit and push
         run: |
