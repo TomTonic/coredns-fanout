@@ -427,30 +427,24 @@ jobs:
 
       - name: Update version.json
         run: |
+          # Extract clean Go version number (e.g. "go1.26.0 linux/amd64" -> "1.26.0")
+          GO_VER=$(echo "${{ env.GO_TOOLCHAIN }}" | sed 's/^go//' | awk '{print $1}')
+
           jq \
             --arg v "${{ env.VERSION }}" \
             --arg c "${{ env.COREDNS_TAG }}" \
             --arg f "${{ env.FANOUT_TAG }}" \
             --arg g "${{ env.GO_IMAGE }}" \
             --arg a "${{ env.RUNTIME_BASE }}" \
-            '.version=$v | .coredns=$c | .fanout=$f | .go=$g | .alpine=$a' \
+            --arg gv "${GO_VER}" \
+            '.version=$v | .coredns=$c | .fanout=$f | .go=$g | .alpine=$a | .go_version=$gv' \
             version.json > version.json.tmp
           mv version.json.tmp version.json
-
-      - name: Update README.md
-        run: |
-          DATE_UTC=$(date -u +"%d.%m.%Y %H:%M UTC")
-          sed -i "s/coredns-fanout version: .*/coredns-fanout version: v${{ env.VERSION }}/" README.md
-          sed -i "s/Latest release lookup: .*/Latest release lookup: ${DATE_UTC}/" README.md
-          sed -i "s/Latest CoreDNS release: .*/Latest CoreDNS release: ${{ env.COREDNS_TAG }}/" README.md
-          sed -i "s/Latest Fanout release: .*/Latest Fanout release: ${{ env.FANOUT_TAG }}/" README.md
-          sed -i "s|Go toolchain: .*|Go toolchain: ${{ env.GO_TOOLCHAIN }} (${{ env.GO_IMAGE }})|" README.md
-          sed -i "s|Runtime base image: .*|Runtime base image: ${{ env.RUNTIME_BASE }}|" README.md
 
       - name: Commit and push
         run: |
           git config --global user.name "GitHub Action Auto-Build"
           git config --global user.email "action@github.com"
-          git add version.json README.md
+          git add version.json
           git commit -m "Release v${{ env.VERSION }} [auto]" || echo "No changes to commit"
           git push origin main

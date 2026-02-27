@@ -1,5 +1,9 @@
 # coredns-fanout
 
+![coredns-fanout Docker image](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FTomTonic%2Fcoredns-fanout%2Frefs%2Fheads%2Fmain%2Fversion.json&query=%24.version&prefix=v&label=coredns-fanout%20Docker%20image&color=blue)
+![Built with CoreDNS](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FTomTonic%2Fcoredns-fanout%2Frefs%2Fheads%2Fmain%2Fversion.json&query=%24.coredns&label=Built%20with%20CoreDNS&color=blue)
+![Built with Fanout](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FTomTonic%2Fcoredns-fanout%2Frefs%2Fheads%2Fmain%2Fversion.json&query=%24.fanout&label=Built%20with%20Fanout&color=blue)
+![Built with Go toolchain](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FTomTonic%2Fcoredns-fanout%2Frefs%2Fheads%2Fmain%2Fversion.json&query=%24.go_version&prefix=v&label=Built%20with%20Go%20toolchain&color=blue)
 [![Vulnerabilities of Docker Image](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/TomTonic/f925f1cacde626864f41dd3fc86d43b2/raw/coredns_fanout-docker_image.json)](https://gist.github.com/TomTonic/f925f1cacde626864f41dd3fc86d43b2#coredns_fanout-docker_image-md)
 
 A Docker container for a local high performance DNS cache for your notebook or your LAN.
@@ -7,18 +11,6 @@ A Docker container for a local high performance DNS cache for your notebook or y
 The Docker image encapsulates a standard build of [CoreDNS](https://github.com/coredns/coredns) with an activated [fanout](https://github.com/networkservicemesh/fanout) plugin.
 Plattform specific Docker images can be obtained from the Docker Hub repository [tomtonic/coredns-fanout](https://hub.docker.com/r/tomtonic/coredns-fanout).
 Pinned dependency versions for deterministic builds are managed in `build-versions.json`.
-
-coredns-fanout version: v2.0.0
-
-Latest release lookup: 26.02.2026 21:34 UTC
-
-Latest CoreDNS release: v1.14.1
-
-Latest Fanout release: v1.11.3
-
-Go toolchain: go1.26.0 linux/amd64 (docker.io/library/golang:1.26-bookworm@sha256:2a0ba12e116687098780d3ce700f9ce3cb340783779646aafbabed748fa6677c)
-
-Runtime base image: gcr.io/distroless/static-debian12:nonroot@sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1
 
 ## How to install
 
