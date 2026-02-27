@@ -1,0 +1,56 @@
+---
+name: Refresh grype_me Security Badge
+
+on:
+  schedule:
+    - cron: '5 18 * * *' # every day at 18:05 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update-badge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        with:
+          egress-policy: audit
+
+      - name: Ensure required secrets and variables are set
+        shell: bash
+        env:
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ vars.GRYPE_BADGE_GIST_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$GIST_TOKEN" ]]; then
+            echo "Missing required secret: GIST_TOKEN" >&2
+            exit 1
+          fi
+          if [[ -z "$GIST_ID" ]]; then
+            echo "Missing required repository variable: GRYPE_BADGE_GIST_ID" >&2
+            exit 1
+          fi
+
+      - name: Checkout repository (with tags)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # fetch-depth: 0 (non-default) - fetch full history to ensure tag lookups work correctly
+          fetch-depth: 0
+          # fetch-tags: true (non-default) - need tags to detect latest_release for the badge
+          fetch-tags: true
+
+      - name: Scan nightly Docker image
+        id: grype_me_image
+        uses: TomTonic/grype_me@v1 # don't pin, rolling tag changes daily
+        with:
+          image: tomtonic/coredns-fanout:latest
+          description: |
+            Automated nightly scan of the published Docker image `tomtonic/coredns-fanout:latest`.
+            This report powers the "Vulnerabilities of Docker Image" badge in README.
+          fail-build: false
+          gist-token: ${{ secrets.GIST_TOKEN }}
+          gist-id: ${{ vars.GRYPE_BADGE_GIST_ID }}
+          gist-filename: 'coredns_fanout-docker_image'
