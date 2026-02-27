@@ -1,9 +1,10 @@
 name: Auto-Build CoreDNS with Fanout
 
 on:
-  schedule:
-    - cron: 0 0 * * *  # runs daily at midnight
-  workflow_dispatch:  # Manual execution allowed
+  push:
+    paths:
+      - 'build-versions.json'
+  workflow_dispatch:
 
 # Prevent concurrent builds from racing on version.json
 concurrency:

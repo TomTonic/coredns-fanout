@@ -1,7 +1,7 @@
 {
   "extends": ["config:recommended"],
   "timezone": "Europe/Berlin",
-  "schedule": ["after 3:59pm and before 4:01pm on monday, wednesday, friday"],
+  "schedule": ["after 3:55pm and before 4:05pm on every weekday"],
   "automerge": false,
   "enabledManagers": ["github-actions", "custom.regex"],
   "customManagers": [
@@ -56,6 +56,14 @@
     {
       "description": "Auto-merge patch and digest updates only",
       "matchUpdateTypes": ["patch", "digest"],
+      "automerge": true,
+      "automergeType": "pr"
+    }
+    ,
+    {
+      "description": "Manage GitHub Actions used in workflows; auto-merge patch updates",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["patch"],
       "automerge": true,
       "automergeType": "pr"
     }
