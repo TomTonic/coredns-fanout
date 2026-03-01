@@ -1,13 +1,22 @@
 {
-  "extends": ["config:recommended"],
+  "extends": [
+    "config:recommended"
+  ],
   "timezone": "Europe/Berlin",
-  "schedule": ["after 3:55pm and before 4:05pm on every weekday"],
+  "schedule": [
+    "after 3:55pm and before 4:05pm every weekday"
+  ],
   "automerge": false,
-  "enabledManagers": ["github-actions", "custom.regex"],
+  "enabledManagers": [
+    "github-actions",
+    "custom.regex"
+  ],
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^build-versions\\.json$/"],
+      "managerFilePatterns": [
+        "/^build-versions\\.json$/"
+      ],
       "matchStrings": [
         "\"coredns_tag\"\\s*:\\s*\"(?<currentValue>[^\"]+)\""
       ],
@@ -17,7 +26,9 @@
     },
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^build-versions\\.json$/"],
+      "managerFilePatterns": [
+        "/^build-versions\\.json$/"
+      ],
       "matchStrings": [
         "\"fanout_tag\"\\s*:\\s*\"(?<currentValue>[^\"]+)\""
       ],
@@ -27,7 +38,9 @@
     },
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^build-versions\\.json$/"],
+      "managerFilePatterns": [
+        "/^build-versions\\.json$/"
+      ],
       "matchStrings": [
         "\"go_image\"\\s*:\\s*\"(?<depName>docker\\.io/library/golang)(?::(?<currentValue>[^\"@]+))?(?:@(?<currentDigest>sha256:[a-f0-9]+))?\""
       ],
@@ -35,7 +48,9 @@
     },
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^build-versions\\.json$/"],
+      "managerFilePatterns": [
+        "/^build-versions\\.json$/"
+      ],
       "matchStrings": [
         "\"runtime_base\"\\s*:\\s*\"(?<depName>gcr\\.io/distroless/static-debian12):(?<currentValue>[^\"@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?\""
       ],
@@ -44,26 +59,41 @@
   ],
   "packageRules": [
     {
-      "matchManagers": ["custom.regex"],
-      "matchDatasources": ["github-releases", "github-tags"],
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "github-releases",
+        "github-tags"
+      ],
       "pinDigests": false
     },
     {
-      "matchManagers": ["custom.regex"],
-      "matchDatasources": ["docker"],
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
       "pinDigests": true
     },
     {
       "description": "Auto-merge patch and digest updates only",
-      "matchUpdateTypes": ["patch", "digest"],
+      "matchUpdateTypes": [
+        "patch",
+        "digest"
+      ],
       "automerge": true,
       "automergeType": "pr"
-    }
-    ,
+    },
     {
       "description": "Manage GitHub Actions used in workflows; auto-merge patch updates",
-      "matchManagers": ["github-actions"],
-      "matchUpdateTypes": ["patch"],
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "patch"
+      ],
       "automerge": true,
       "automergeType": "pr"
     }
