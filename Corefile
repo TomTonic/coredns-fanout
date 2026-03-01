@@ -62,29 +62,29 @@
 }
 .:5305 {
     bind 127.0.0.1 ::1
-    forward . tls://185.14.45.185 {
-        tls_servername "dns0.eu"
+    forward . tls://1.1.1.1 {
+        tls_servername "one.one.one.one"
         health_check 10s
     }
 }
 .:5306 {
     bind 127.0.0.1 ::1
-    forward . tls://213.226.71.175 {
-        tls_servername "dns0.eu"
+    forward . tls://1.0.0.1 {
+        tls_servername "one.one.one.one"
         health_check 10s
     }
 }
 .:5307 {
     bind 127.0.0.1 ::1
-    forward . tls://2a03:90c0:94::34 {
-        tls_servername "dns0.eu"
+    forward . tls://2606:4700:4700::1111 {
+        tls_servername "one.one.one.one"
         health_check 10s
     }
 }
 .:5308 {
     bind 127.0.0.1 ::1
-    forward . tls://2a06:f902:1:100:9000:9000:4217:b201 {
-        tls_servername "dns0.eu"
+    forward . tls://2606:4700:4700::1001 {
+        tls_servername "one.one.one.one"
         health_check 10s
     }
 }
