@@ -32,7 +32,7 @@
       "matchStrings": [
         "\"fanout_tag\"\\s*:\\s*\"(?<currentValue>[^\"]+)\""
       ],
-      "depNameTemplate": "networkservicemesh/fanout",
+      "depNameTemplate": "TomTonic/fanout",
       "datasourceTemplate": "github-releases",
       "versioningTemplate": "semver"
     },

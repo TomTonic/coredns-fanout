@@ -182,7 +182,7 @@ jobs:
         run: |
           git clone --branch ${{ env.COREDNS_TAG }} --depth 1 https://github.com/coredns/coredns.git
           cd coredns
-          echo "fanout:github.com/networkservicemesh/fanout" >> plugin.cfg
+          echo "fanout:github.com/TomTonic/fanout" >> plugin.cfg
 
       - name: Pull pinned Go image once
         run: docker pull ${{ env.GO_IMAGE }}
@@ -205,7 +205,7 @@ jobs:
               # Allow git operations inside the container to access the mounted repo
               git config --global --add safe.directory /work/coredns
 
-              go mod edit -require github.com/networkservicemesh/fanout@${FANOUT_TAG}
+              go mod edit -require github.com/TomTonic/fanout@${FANOUT_TAG}
               go mod tidy
 
               make gen
