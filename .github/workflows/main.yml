@@ -188,7 +188,7 @@ jobs:
           echo "fanout:github.com/TomTonic/fanout" >> plugin.cfg
 
       - name: Restore Go caches
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             .cache/go-mod
