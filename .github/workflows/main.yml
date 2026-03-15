@@ -4,6 +4,9 @@ on:
   push:
     paths:
       - 'build-versions.json'
+  pull_request:
+    paths:
+      - 'build-versions.json'
   workflow_dispatch:
 
 # Prevent concurrent builds from racing on version.json
