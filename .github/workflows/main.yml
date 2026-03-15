@@ -187,18 +187,33 @@ jobs:
           cd coredns
           echo "fanout:github.com/TomTonic/fanout" >> plugin.cfg
 
+      - name: Restore Go caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/go-mod
+            .cache/go-build
+          key: ${{ runner.os }}-go-cache-${{ hashFiles('build-versions.json') }}
+          restore-keys: |
+            ${{ runner.os }}-go-cache-
+
       - name: Pull pinned Go image once
         run: docker pull ${{ env.GO_IMAGE }}
 
       - name: Test once + build all target binaries
         run: |
           mkdir -p artifacts
+          mkdir -p .cache/go-mod .cache/go-build
 
           docker run --rm \
             -v "${{ github.workspace }}:/work" \
+            -v "${{ github.workspace }}/.cache/go-mod:/cache/go-mod" \
+            -v "${{ github.workspace }}/.cache/go-build:/cache/go-build" \
             -w /work/coredns \
             -e FANOUT_TAG=${{ env.FANOUT_TAG }} \
             -e GOFLAGS=-buildvcs=false \
+            -e GOMODCACHE=/cache/go-mod \
+            -e GOCACHE=/cache/go-build \
             ${{ env.GO_IMAGE }} \
             sh -ec '
               apt-get -qq update
