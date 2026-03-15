@@ -9,7 +9,9 @@
 
 A Docker container for a local high performance DNS cache for your notebook or your LAN.
 
-The Docker image encapsulates a standard build of [CoreDNS](https://github.com/coredns/coredns) with an activated [fanout](https://github.com/TomTonic/fanout) plugin.
+The Docker image encapsulates a standard build of [CoreDNS](https://github.com/coredns/coredns) with an activated [TomTonic/fanout](https://github.com/TomTonic/fanout) plugin.
+This fork extends the original fanout plugin with modern encrypted DNS transports and smarter race handling. It adds DNS-over-HTTPS (DoH) over HTTP/2, DNS-over-HTTPS/3 (DoH3), and DNS-over-QUIC (DoQ), enabling CoreDNS to send queries over HTTPS and QUIC for improved privacy and lower latency. In addition, the new `race-continue-on-error-response` option prevents a fast negative response (e.g. `SERVFAIL` or `NXDOMAIN`) from immediately winning; fanout will briefly wait for a `RcodeSuccess` before early-returning. This improves failure tolerance and resolution accuracy by avoiding transient upstream errors, trading a very small amount of extra latency for greater availability and robustness.
+See the project for details: https://github.com/TomTonic/coredns-fanout.
 Plattform specific Docker images can be obtained from the Docker Hub repository [tomtonic/coredns-fanout](https://hub.docker.com/r/tomtonic/coredns-fanout).
 Pinned dependency versions for deterministic builds are managed in `build-versions.json`.
 
