@@ -87,10 +87,12 @@
       "automergeType": "pr"
     },
     {
-      "description": "Manage GitHub Actions used in workflows; auto-merge patch updates",
+      "description": "Manage GitHub Actions used in workflows; group updates and auto-merge patch updates",
       "matchManagers": [
         "github-actions"
       ],
+      "groupName": "GitHub Actions",
+      "groupSlug": "github-actions",
       "matchUpdateTypes": [
         "patch"
       ],
