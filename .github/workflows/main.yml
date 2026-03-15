@@ -252,7 +252,7 @@ jobs:
   build:
     name: Build (${{ matrix.arch }})
     needs: [determine-version, preflight]
-    if: needs.determine-version.outputs.build_needed == 'true'
+    if: needs.determine-version.outputs.build_needed == 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -344,6 +344,7 @@ jobs:
   manifest:
     name: Create Multi-Arch Manifests
     needs: [build, determine-version]
+    if: needs.determine-version.outputs.build_needed == 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.determine-version.outputs.new_version }}
@@ -404,6 +405,7 @@ jobs:
   finalize:
     name: Update Version Tracking
     needs: [manifest, determine-version]
+    if: needs.determine-version.outputs.build_needed == 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
