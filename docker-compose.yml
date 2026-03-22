@@ -1,3 +1,4 @@
+---
 services:
   coredns:
     container_name: dns-cache
@@ -5,8 +6,5 @@ services:
     command: -conf /etc/coredns/Corefile
     network_mode: host
     volumes:
-      - .:/etc/coredns
-    ports:
-      - 53:53/udp # DNS over UDP ("normal" DNS)
-      - 53:53/tcp # DNS over TCP
-    restart: always
+      - .:/etc/coredns:ro
+    restart: unless-stopped

@@ -1,90 +1,86 @@
-# This example configures a light and fast DNS cache for your LAN using CoreDNS with multiple forwarders for both IPv4 and IPv6.
-# The cache will listen on internal addresses and forward queries to multiple upstream DNS servers.
-# The forwarders are configured to use DNS over TLS (DoT) for secure communication and validated DNS responses from Quad9 and DNS0.eu.
-# For more information on how to configure, see https://coredns.io/plugins/cache/
-
-# TODO for YOU: Adjust the bind addresses (127.0.0.1 and ::1) and forwarder addresses as needed for your network setup.
+# Example CoreDNS setup for a fast local DNS cache with mixed upstream
+# transports.
+#
+# The example below combines local DoT forward stubs with direct DoH over
+# HTTP/2, DoH over HTTP/3, and DoQ upstreams in one fanout block. This keeps
+# the four IP-address-based upstreams on TLS while still demonstrating mixed
+# transport fanout.
+#
+# Prometheus metrics are always enabled.
 
 . {
-    bind 127.0.0.1                  # internal IPv4 address where the DNS cache shall be reachable, e.g. 192.168.1.100
-    bind ::1                        # internal IPv6 address where the DNS cache shall be reachable, e.g. fd00::100
-        bufsize 1232
-        local
+    bind 127.0.0.1    # Change to your LAN IPv4 address if clients on your network should use this cache.
+    bind ::1          # Change to your LAN IPv6 address if needed.
 
-    # fan out DNS queries in parallel to multiple forwarders, four for IPv4 and four for IPv6 in this case
-    # see https://coredns.io/plugins/fanout/
-    fanout . 127.0.0.1:5301 127.0.0.1:5302 [::1]:5303 [::1]:5304 127.0.0.1:5305 127.0.0.1:5306 [::1]:5307 [::1]:5308 {
-        policy weighted-random      # select DNS servers randomly based on weighted-random-server-count and weighted-random-load-factor params
-                                    # weighted-random-server-count is the number of DNS servers to be requested. Equals to the number of specified IPs by default.
-                                    # weighted-random-load-factor is the probability of selecting a server. This is specified in the order of the list of IP addresses and takes values between 1 and 100. By default, all servers have an equal probability of 100.
-        # race                      # gives priority to the first result, whether it is negative or not, as long as it is a standard DNS result. Multiple upstream servers are configured but one of them is down, query a non-existent domain. If race is enable, we will get NXDOMAIN result quickly, otherwise we will get "connection timed out" result in a few seconds.
+    bufsize 1232
+    local
+
+    # Mixed fanout setup:
+    # - four local DoT forward stubs for IP-address-based upstreams
+    # - one DoH endpoint over HTTP/2
+    # - one DoH endpoint over HTTP/3
+    # - one DoQ endpoint
+    #
+    # Race mode returns quickly. In the intended behavior for this setup,
+    # NXDOMAIN counts as a successful terminal DNS answer and should also end
+    # the race early, while transport failures and other error responses may be
+    # ignored briefly if a successful answer is still likely to arrive.
+    fanout . 127.0.0.1:5301 127.0.0.1:5302 [::1]:5303 [::1]:5304 https://cloudflare-dns.com/dns-query h3://cloudflare-dns.com/dns-query quic://dns.adguard-dns.com {
+        policy weighted-random
+        weighted-random-server-count 4
+        weighted-random-load-factor 100 100 100 100 100 100 100
+        worker-count 4
+        race
+        race-continue-on-error-response
+        timeout 1500ms
     }
-    cache {                         # see https://coredns.io/plugins/cache/
-        success 100000              # setting for caching successful responses. the maximum number of packets we cache before we start evicting (randomly)
-        denial 20000                # setting for caching denial of existence responses. the maximum number of packets we cache before we start evicting (LRU)
-        prefetch 5 3600s            # prefetch popular items when they are about to be expunged from the cache.
-        serve_stale 3600s immediate # cache will serve an expired entry to a client if there is one available as long as it has not been expired for longer than DURATION. immediate will immediately send the expired entry to the client before checking to see if the entry is available from the source
+
+    cache {
+        success 100000
+        denial 20000
+        prefetch 5 3600s
+        serve_stale 3600s immediate
     }
+
     log . "{remote} - {class} {type} {name} EDNS-DO:{>do} RCODE:{rcode} FLAGS:{>rflags} {duration}" {
         class all
     }
-    loop
+
+    prometheus 127.0.0.1:9153
+
     errors
     health
+    loop
 }
+
 .:5301 {
     bind 127.0.0.1 ::1
     forward . tls://9.9.9.11 {
-        tls_servername "dns11.quad9.net"
+        tls_servername dns11.quad9.net
         health_check 10s
     }
 }
+
 .:5302 {
     bind 127.0.0.1 ::1
-    forward . tls://149.112.112.11 {
-        tls_servername "dns11.quad9.net"
+    forward . tls://1.1.1.1 {
+        tls_servername one.one.one.one
         health_check 10s
     }
 }
+
 .:5303 {
     bind 127.0.0.1 ::1
     forward . tls://2620:fe::11 {
-        tls_servername "dns11.quad9.net"
+        tls_servername dns11.quad9.net
         health_check 10s
     }
 }
+
 .:5304 {
     bind 127.0.0.1 ::1
-    forward . tls://2620:fe::fe:11 {
-        tls_servername "dns11.quad9.net"
-        health_check 10s
-    }
-}
-.:5305 {
-    bind 127.0.0.1 ::1
-    forward . tls://1.1.1.1 {
-        tls_servername "one.one.one.one"
-        health_check 10s
-    }
-}
-.:5306 {
-    bind 127.0.0.1 ::1
-    forward . tls://1.0.0.1 {
-        tls_servername "one.one.one.one"
-        health_check 10s
-    }
-}
-.:5307 {
-    bind 127.0.0.1 ::1
     forward . tls://2606:4700:4700::1111 {
-        tls_servername "one.one.one.one"
-        health_check 10s
-    }
-}
-.:5308 {
-    bind 127.0.0.1 ::1
-    forward . tls://2606:4700:4700::1001 {
-        tls_servername "one.one.one.one"
+        tls_servername one.one.one.one
         health_check 10s
     }
 }
