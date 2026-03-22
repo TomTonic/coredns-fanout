@@ -30,7 +30,7 @@ This image deliberately uses [TomTonic/fanout](https://github.com/TomTonic/fanou
 For someone who just wants a dependable local DNS cache, the relevant differences are:
 
 - More upstream protocols. In addition to UDP, TCP, and DoT, the fork supports DoH over HTTP/2, DoH3 over HTTP/3, and DoQ. You can even mix these transports in one `fanout` block.
-- Better behavior when a fast upstream returns a bad answer. With `race-continue-on-error-response`, transport failures and error responses such as `SERVFAIL` do not automatically beat a slightly slower successful response. In the intended race behavior for this image, `NXDOMAIN` is treated as a valid terminal DNS answer and should still be allowed to end the race early.
+- Better behavior when a fast upstream returns a bad answer. With `race-continue-on-error`, transport failures and error responses such as `SERVFAIL` do not automatically beat a slightly slower successful response. In the intended race behavior for this image, `NXDOMAIN` is treated as a valid terminal DNS answer and should still be allowed to end the race early.
 - Harder, more resilient transport handling. The fork adds stronger connection reuse and pooling for HTTPS and QUIC, plus more robust handling around failed streams and unhealthy connections.
 - Better observability. The fork exposes additional error metrics per upstream via the prometheus endpoint.
 - Better supply-chain hygiene. The maintained fork follows current CoreDNS and Go releases and trims away unnecessary dependency surface.
@@ -77,7 +77,7 @@ These are the settings most users end up changing:
 - upstream selection: which resolvers you want to query in parallel
 - `cache`: size, `prefetch`, and `serve_stale`
 - `race`: return quickly when you care most about latency
-- `race-continue-on-error-response`: keep race mode without letting a fast transport failure or `SERVFAIL` win too early
+- `race-continue-on-error`: keep race mode without letting a fast transport failure or `SERVFAIL` win too early
 - `policy weighted-random`: query only a subset of upstreams per request
 - `worker-count`: limit concurrency per request
 - `timeout` and `attempt-count`: tune how aggressively fanout should give up on weak upstreams
@@ -96,7 +96,7 @@ If you want the smallest possible configuration, point `fanout` directly at encr
 
     fanout . https://cloudflare-dns.com/dns-query h3://cloudflare-dns.com/dns-query quic://dns.adguard-dns.com {
         race
-        race-continue-on-error-response
+        race-continue-on-error
         timeout 1500ms
     }
 
@@ -140,7 +140,7 @@ The shipped example demonstrates a single `fanout` block that mixes DoT-backed l
         weighted-random-server-count 4
         worker-count 4
         race
-        race-continue-on-error-response
+        race-continue-on-error
         timeout 1500ms
     }
 
@@ -185,7 +185,7 @@ This is a good fit when you want the example itself to show the full range of up
 . {
     fanout . https://dns.google/dns-query https://cloudflare-dns.com/dns-query h3://cloudflare-dns.com/dns-query {
         race
-        race-continue-on-error-response
+        race-continue-on-error
         timeout 1500ms
     }
 }
@@ -259,7 +259,7 @@ That example shows the recent total fanout request rate across all configured up
 - Resolver for the whole home network: change `bind` to the host's LAN addresses and point clients at that resolver via DHCP or static settings
 - Maximum simplicity: use direct `fanout` upstreams with DoH, DoH3, or DoQ
 - Maximum per-provider control: put `fanout` in front of local `forward` stubs
-- Low latency with occasional weak upstreams: enable both `race` and `race-continue-on-error-response`
+- Low latency with occasional weak upstreams: enable both `race` and `race-continue-on-error`
 
 ## Further reading
 
