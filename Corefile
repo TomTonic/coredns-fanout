@@ -31,7 +31,7 @@
         weighted-random-load-factor 100 100 100 100 100 100 100
         worker-count 4
         race
-        race-continue-on-error-response
+        race-continue-on-error
         timeout 1500ms
     }
 
