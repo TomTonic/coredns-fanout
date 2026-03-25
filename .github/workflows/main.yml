@@ -2,6 +2,8 @@ name: Auto-Build CoreDNS with Fanout
 
 on:
   push:
+    branches:
+      - main
     paths:
       - 'build-versions.json'
   pull_request:
