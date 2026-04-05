@@ -46,8 +46,6 @@ The production workflow is intentionally explicit:
 3. Create a GitHub Release with the tag `vX.Y.Z`.
 4. The release workflow publishes production images and then updates `version.json` on `main` to match that release tag and metadata.
 
-If you forget to update `version.json` before creating the GitHub Release, the release still works because the tag is authoritative.
-
 ## Why use it
 
 - CoreDNS runs as a local cache in front of your upstream resolvers.
