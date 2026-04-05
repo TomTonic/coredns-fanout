@@ -3,7 +3,7 @@ name: Refresh grype_me Security Badge
 
 on:
   schedule:
-    - cron: '5 18 * * *' # every day at 18:05 UTC
+    - cron: 5 18 * * * # every day at 18:05 UTC
   workflow_dispatch:
 
 permissions:
@@ -53,4 +53,4 @@ jobs:
           fail-build: false
           gist-token: ${{ secrets.GIST_TOKEN }}
           gist-id: ${{ vars.GRYPE_BADGE_GIST_ID }}
-          gist-filename: 'coredns_fanout-docker_image'
+          gist-filename: coredns_fanout-docker_image

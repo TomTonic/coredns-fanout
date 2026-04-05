@@ -1,0 +1,114 @@
+name: Publish Production Release
+
+on:
+  release:
+    types:
+      - published
+
+concurrency:
+  group: release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate-release:
+    name: Validate Release Metadata
+    if: github.event.release.prerelease == false && github.event.release.draft == false
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      coredns_tag: ${{ steps.release.outputs.coredns_tag }}
+      fanout_tag: ${{ steps.release.outputs.fanout_tag }}
+      go_image: ${{ steps.release.outputs.go_image }}
+      go_toolchain: ${{ steps.release.outputs.go_toolchain }}
+      runtime_base: ${{ steps.release.outputs.runtime_base }}
+    permissions:
+      contents: read
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout Repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Ensure release commit is on main
+        run: |
+          set -euo pipefail
+
+          git fetch origin main --depth=1
+          git merge-base --is-ancestor HEAD origin/main
+
+      - name: Validate release tag, version.json and build metadata
+        id: release
+        run: |
+          set -euo pipefail
+
+          RELEASE_TAG="${{ github.event.release.tag_name }}"
+          if ! printf '%s' "${RELEASE_TAG}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "GitHub release tag must use the format vX.Y.Z." >&2
+            exit 1
+          fi
+
+          VERSION=$(jq -r '.version // ""' version.json)
+          STORED_COREDNS=$(jq -r '.coredns // ""' version.json)
+          STORED_FANOUT=$(jq -r '.fanout // ""' version.json)
+          STORED_GO_IMAGE=$(jq -r '.go // ""' version.json)
+          STORED_GO_VERSION=$(jq -r '.go_version // ""' version.json)
+          STORED_RUNTIME_BASE=$(jq -r '.alpine // ""' version.json)
+
+          COREDNS_TAG=$(jq -r '.coredns_tag // ""' build-versions.json)
+          FANOUT_TAG=$(jq -r '.fanout_tag // ""' build-versions.json)
+          GO_IMAGE=$(jq -r '.go_image // ""' build-versions.json)
+          GO_TOOLCHAIN=$(jq -r '.go_toolchain // ""' build-versions.json)
+          RUNTIME_BASE=$(jq -r '.runtime_base // ""' build-versions.json)
+          EXPECTED_GO_VERSION=$(printf '%s' "${GO_TOOLCHAIN}" | sed 's/^go//' | awk '{print $1}')
+
+          if [ -z "${VERSION}" ] || [ -z "${COREDNS_TAG}" ] || [ -z "${FANOUT_TAG}" ] || [ -z "${GO_IMAGE}" ] || [ -z "${GO_TOOLCHAIN}" ] || [ -z "${RUNTIME_BASE}" ]; then
+            echo "version.json or build-versions.json is missing required release metadata." >&2
+            exit 1
+          fi
+
+          if [ "v${VERSION}" != "${RELEASE_TAG}" ]; then
+            echo "version.json version (${VERSION}) does not match GitHub release tag (${RELEASE_TAG})." >&2
+            exit 1
+          fi
+
+          if [ "${STORED_COREDNS}" != "${COREDNS_TAG}" ] || \
+             [ "${STORED_FANOUT}" != "${FANOUT_TAG}" ] || \
+             [ "${STORED_GO_IMAGE}" != "${GO_IMAGE}" ] || \
+             [ "${STORED_RUNTIME_BASE}" != "${RUNTIME_BASE}" ] || \
+             [ "${STORED_GO_VERSION}" != "${EXPECTED_GO_VERSION}" ]; then
+            echo "version.json must already describe the exact production release metadata from build-versions.json before creating the GitHub release." >&2
+            exit 1
+          fi
+
+          {
+            echo "version=${VERSION}"
+            echo "coredns_tag=${COREDNS_TAG}"
+            echo "fanout_tag=${FANOUT_TAG}"
+            echo "go_image=${GO_IMAGE}"
+            echo "go_toolchain=${GO_TOOLCHAIN}"
+            echo "runtime_base=${RUNTIME_BASE}"
+          } >> "$GITHUB_OUTPUT"
+
+  publish-release-images:
+    name: Publish Production Images
+    needs: validate-release
+    if: github.event.release.prerelease == false && github.event.release.draft == false
+    uses: ./.github/workflows/publish-images.yml
+    with:
+      git_ref: ${{ github.event.release.tag_name }}
+      version: ${{ needs.validate-release.outputs.version }}
+      coredns_tag: ${{ needs.validate-release.outputs.coredns_tag }}
+      fanout_tag: ${{ needs.validate-release.outputs.fanout_tag }}
+      go_image: ${{ needs.validate-release.outputs.go_image }}
+      go_toolchain: ${{ needs.validate-release.outputs.go_toolchain }}
+      runtime_base: ${{ needs.validate-release.outputs.runtime_base }}
+      channel: stable
+      publish_images: true
+    secrets: inherit
