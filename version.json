@@ -1,7 +1,7 @@
 {
-  "version": "2.4.2",
+  "version": "2.4.3",
   "coredns": "v1.14.2",
-  "fanout": "v1.15.0",
+  "fanout": "v1.15.1",
   "go": "docker.io/library/golang:1.26.1-bookworm@sha256:8e8aa801e8417ef0b5c42b504dd34db3db911bb73dba933bd8bde75ed815fdbb",
   "go_version": "1.26.1",
   "alpine": "gcr.io/distroless/static-debian12:nonroot@sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1"
