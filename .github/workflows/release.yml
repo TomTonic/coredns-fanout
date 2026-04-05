@@ -21,6 +21,7 @@ jobs:
       go_image: ${{ steps.release.outputs.go_image }}
       go_toolchain: ${{ steps.release.outputs.go_toolchain }}
       runtime_base: ${{ steps.release.outputs.runtime_base }}
+      go_version: ${{ steps.release.outputs.go_version }}
     permissions:
       contents: read
     steps:
@@ -43,7 +44,7 @@ jobs:
           git fetch origin main --depth=1
           git merge-base --is-ancestor HEAD origin/main
 
-      - name: Validate release tag, version.json and build metadata
+      - name: Validate release tag and build metadata
         id: release
         run: |
           set -euo pipefail
@@ -54,36 +55,17 @@ jobs:
             exit 1
           fi
 
-          VERSION=$(jq -r '.version // ""' version.json)
-          STORED_COREDNS=$(jq -r '.coredns // ""' version.json)
-          STORED_FANOUT=$(jq -r '.fanout // ""' version.json)
-          STORED_GO_IMAGE=$(jq -r '.go // ""' version.json)
-          STORED_GO_VERSION=$(jq -r '.go_version // ""' version.json)
-          STORED_RUNTIME_BASE=$(jq -r '.alpine // ""' version.json)
+          VERSION="${RELEASE_TAG#v}"
 
           COREDNS_TAG=$(jq -r '.coredns_tag // ""' build-versions.json)
           FANOUT_TAG=$(jq -r '.fanout_tag // ""' build-versions.json)
           GO_IMAGE=$(jq -r '.go_image // ""' build-versions.json)
           GO_TOOLCHAIN=$(jq -r '.go_toolchain // ""' build-versions.json)
           RUNTIME_BASE=$(jq -r '.runtime_base // ""' build-versions.json)
-          EXPECTED_GO_VERSION=$(printf '%s' "${GO_TOOLCHAIN}" | sed 's/^go//' | awk '{print $1}')
+          GO_VERSION=$(printf '%s' "${GO_TOOLCHAIN}" | sed 's/^go//' | awk '{print $1}')
 
-          if [ -z "${VERSION}" ] || [ -z "${COREDNS_TAG}" ] || [ -z "${FANOUT_TAG}" ] || [ -z "${GO_IMAGE}" ] || [ -z "${GO_TOOLCHAIN}" ] || [ -z "${RUNTIME_BASE}" ]; then
-            echo "version.json or build-versions.json is missing required release metadata." >&2
-            exit 1
-          fi
-
-          if [ "v${VERSION}" != "${RELEASE_TAG}" ]; then
-            echo "version.json version (${VERSION}) does not match GitHub release tag (${RELEASE_TAG})." >&2
-            exit 1
-          fi
-
-          if [ "${STORED_COREDNS}" != "${COREDNS_TAG}" ] || \
-             [ "${STORED_FANOUT}" != "${FANOUT_TAG}" ] || \
-             [ "${STORED_GO_IMAGE}" != "${GO_IMAGE}" ] || \
-             [ "${STORED_RUNTIME_BASE}" != "${RUNTIME_BASE}" ] || \
-             [ "${STORED_GO_VERSION}" != "${EXPECTED_GO_VERSION}" ]; then
-            echo "version.json must already describe the exact production release metadata from build-versions.json before creating the GitHub release." >&2
+          if [ -z "${COREDNS_TAG}" ] || [ -z "${FANOUT_TAG}" ] || [ -z "${GO_IMAGE}" ] || [ -z "${GO_TOOLCHAIN}" ] || [ -z "${RUNTIME_BASE}" ] || [ -z "${GO_VERSION}" ]; then
+            echo "build-versions.json is missing required release metadata." >&2
             exit 1
           fi
 
@@ -94,6 +76,7 @@ jobs:
             echo "go_image=${GO_IMAGE}"
             echo "go_toolchain=${GO_TOOLCHAIN}"
             echo "runtime_base=${RUNTIME_BASE}"
+            echo "go_version=${GO_VERSION}"
           } >> "$GITHUB_OUTPUT"
 
   publish-release-images:
@@ -112,3 +95,52 @@ jobs:
       channel: stable
       publish_images: true
     secrets: inherit
+
+  sync-version-tracking:
+    name: Sync version.json to Release
+    needs: [validate-release, publish-release-images]
+    if: github.event.release.prerelease == false && github.event.release.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d # v2.16.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout main branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Update version.json from release
+        run: |
+          set -euo pipefail
+
+          jq \
+            --arg v "${{ needs.validate-release.outputs.version }}" \
+            --arg c "${{ needs.validate-release.outputs.coredns_tag }}" \
+            --arg f "${{ needs.validate-release.outputs.fanout_tag }}" \
+            --arg g "${{ needs.validate-release.outputs.go_image }}" \
+            --arg gv "${{ needs.validate-release.outputs.go_version }}" \
+            --arg a "${{ needs.validate-release.outputs.runtime_base }}" \
+            '.version=$v | .coredns=$c | .fanout=$f | .go=$g | .go_version=$gv | .alpine=$a' \
+            version.json > version.json.tmp
+          mv version.json.tmp version.json
+
+      - name: Commit and push version.json update
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- version.json; then
+            echo "version.json is already in sync."
+            exit 0
+          fi
+
+          git config user.name "GitHub Action Release Sync"
+          git config user.email "action@github.com"
+          git add version.json
+          git commit -m "Sync version.json to release v${{ needs.validate-release.outputs.version }} [auto]"
+          git push origin main

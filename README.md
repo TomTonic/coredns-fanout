@@ -19,7 +19,7 @@ This repository now publishes two clearly separated image channels:
 
 - Test images are built automatically when `build-versions.json` changes on `main`. They are published as immutable pre-release style tags such as `tomtonic/coredns-fanout:v2.5.0-test.104.1.a1b2c3d` plus the floating tag `tomtonic/coredns-fanout:test`.
 - Production images are published only when a GitHub Release is explicitly created. That workflow publishes `tomtonic/coredns-fanout:vX.Y.Z` and the floating production tags `vX.Y`, `vX`, and `latest`.
-- `version.json` now tracks the production release line only. Its `.version` value must match the GitHub Release tag exactly, for example `"version": "2.4.0"` in `version.json` and `v2.4.0` as the GitHub Release tag.
+- The GitHub Release tag is the source of truth for production version numbers. After a successful production release, the workflow automatically syncs `version.json` (including `.version`) on `main`.
 
 That means you can still pull and test CI-built images normally, but they are always unmistakably marked as non-production by the `-test...` suffix. The stable tags never move unless you create a GitHub Release on purpose.
 
@@ -42,11 +42,11 @@ docker pull tomtonic/coredns-fanout:latest
 The production workflow is intentionally explicit:
 
 1. Update `build-versions.json` to the dependency set you want to ship.
-2. Update `version.json` so it already describes that exact production release, including `"version": "X.Y.Z"` and the matching dependency metadata.
-3. Merge that state to `main` and let the automatic `-test` image build finish.
-4. Create a GitHub Release with the tag `vX.Y.Z`.
+2. Merge that state to `main` and let the automatic `-test` image build finish.
+3. Create a GitHub Release with the tag `vX.Y.Z`.
+4. The release workflow publishes production images and then updates `version.json` on `main` to match that release tag and metadata.
 
-The release workflow validates that the release tag, `version.json`, and `build-versions.json` all match before it publishes the production tags.
+If you forget to update `version.json` before creating the GitHub Release, the release still works because the tag is authoritative.
 
 ## Why use it
 
