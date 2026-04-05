@@ -13,6 +13,41 @@ It is aimed at users who want a simple, low-latency DNS cache for a laptop, home
 
 The badges above reflect the versions that are actually shipped. Builds are produced from pinned dependencies in `build-versions.json` and published as multi-arch images for `amd64`, `arm64`, and `armhf`.
 
+## Image channels and releases
+
+This repository now publishes two clearly separated image channels:
+
+- Test images are built automatically when `build-versions.json` changes on `main`. They are published as immutable pre-release style tags such as `tomtonic/coredns-fanout:v2.5.0-test.104.1.a1b2c3d` plus the floating tag `tomtonic/coredns-fanout:test`.
+- Production images are published only when a GitHub Release is explicitly created. That workflow publishes `tomtonic/coredns-fanout:vX.Y.Z` and the floating production tags `vX.Y`, `vX`, and `latest`.
+- `version.json` now tracks the production release line only. Its `.version` value must match the GitHub Release tag exactly, for example `"version": "2.4.0"` in `version.json` and `v2.4.0` as the GitHub Release tag.
+
+That means you can still pull and test CI-built images normally, but they are always unmistakably marked as non-production by the `-test...` suffix. The stable tags never move unless you create a GitHub Release on purpose.
+
+Examples:
+
+```bash
+# latest automatic test build
+docker pull tomtonic/coredns-fanout:test
+
+# specific immutable test build
+docker pull tomtonic/coredns-fanout:v2.5.0-test.104.1.a1b2c3d
+
+# explicit production release
+docker pull tomtonic/coredns-fanout:v2.4.0
+docker pull tomtonic/coredns-fanout:latest
+```
+
+### Releasing for production
+
+The production workflow is intentionally explicit:
+
+1. Update `build-versions.json` to the dependency set you want to ship.
+2. Update `version.json` so it already describes that exact production release, including `"version": "X.Y.Z"` and the matching dependency metadata.
+3. Merge that state to `main` and let the automatic `-test` image build finish.
+4. Create a GitHub Release with the tag `vX.Y.Z`.
+
+The release workflow validates that the release tag, `version.json`, and `build-versions.json` all match before it publishes the production tags.
+
 ## Why use it
 
 - CoreDNS runs as a local cache in front of your upstream resolvers.
