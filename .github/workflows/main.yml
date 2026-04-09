@@ -26,7 +26,6 @@ jobs:
       coredns_tag: ${{ steps.deps.outputs.coredns_tag }}
       fanout_tag: ${{ steps.deps.outputs.fanout_tag }}
       go_image: ${{ steps.deps.outputs.go_image }}
-      go_toolchain: ${{ steps.deps.outputs.go_toolchain }}
       runtime_base: ${{ steps.deps.outputs.runtime_base }}
     permissions:
       contents: read
@@ -50,10 +49,9 @@ jobs:
           COREDNS_TAG=$(jq -r '.coredns_tag // ""' "${FILE}")
           FANOUT_TAG=$(jq -r '.fanout_tag // ""' "${FILE}")
           GO_IMAGE=$(jq -r '.go_image // ""' "${FILE}")
-          GO_TOOLCHAIN=$(jq -r '.go_toolchain // ""' "${FILE}")
           RUNTIME_BASE=$(jq -r '.runtime_base // ""' "${FILE}")
 
-          if [ -z "${COREDNS_TAG}" ] || [ -z "${FANOUT_TAG}" ] || [ -z "${GO_IMAGE}" ] || [ -z "${GO_TOOLCHAIN}" ] || [ -z "${RUNTIME_BASE}" ]; then
+          if [ -z "${COREDNS_TAG}" ] || [ -z "${FANOUT_TAG}" ] || [ -z "${GO_IMAGE}" ] || [ -z "${RUNTIME_BASE}" ]; then
             echo "${FILE} is missing required values." >&2
             exit 1
           fi
@@ -62,7 +60,6 @@ jobs:
             echo "coredns_tag=${COREDNS_TAG}"
             echo "fanout_tag=${FANOUT_TAG}"
             echo "go_image=${GO_IMAGE}"
-            echo "go_toolchain=${GO_TOOLCHAIN}"
             echo "runtime_base=${RUNTIME_BASE}"
           } >> "$GITHUB_OUTPUT"
 
@@ -166,7 +163,6 @@ jobs:
       coredns_tag: ${{ needs.determine-version.outputs.coredns_tag }}
       fanout_tag: ${{ needs.determine-version.outputs.fanout_tag }}
       go_image: ${{ needs.determine-version.outputs.go_image }}
-      go_toolchain: ${{ needs.determine-version.outputs.go_toolchain }}
       runtime_base: ${{ needs.determine-version.outputs.runtime_base }}
       channel: test
       publish_images: false
@@ -183,7 +179,6 @@ jobs:
       coredns_tag: ${{ needs.determine-version.outputs.coredns_tag }}
       fanout_tag: ${{ needs.determine-version.outputs.fanout_tag }}
       go_image: ${{ needs.determine-version.outputs.go_image }}
-      go_toolchain: ${{ needs.determine-version.outputs.go_toolchain }}
       runtime_base: ${{ needs.determine-version.outputs.runtime_base }}
       channel: test
       publish_images: true
