@@ -18,9 +18,6 @@ on:
       go_image:
         required: true
         type: string
-      go_toolchain:
-        required: true
-        type: string
       runtime_base:
         required: true
         type: string
@@ -42,7 +39,6 @@ jobs:
       COREDNS_TAG: ${{ inputs.coredns_tag }}
       FANOUT_TAG: ${{ inputs.fanout_tag }}
       GO_IMAGE: ${{ inputs.go_image }}
-      GO_TOOLCHAIN: ${{ inputs.go_toolchain }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d # v2.16.1
@@ -54,18 +50,26 @@ jobs:
         with:
           ref: ${{ inputs.git_ref }}
 
-      - name: Verify pinned Go toolchain
+      - name: Verify pinned Go image contents
         run: |
           set -euo pipefail
 
+          IMAGE_WITHOUT_DIGEST="${GO_IMAGE%@*}"
+          IMAGE_TAG="${IMAGE_WITHOUT_DIGEST##*:}"
+          EXPECTED_GO_VERSION="${IMAGE_TAG%%-*}"
           ACTUAL_GO_TOOLCHAIN=$(docker run --rm --platform linux/amd64 "${GO_IMAGE}" go version | awk '{print $3, $4}')
-          EXPECTED_GO_TOOLCHAIN="${GO_TOOLCHAIN}"
+          ACTUAL_GO_VERSION=$(printf '%s\n' "${ACTUAL_GO_TOOLCHAIN}" | awk '{print $1}' | sed 's/^go//')
 
-          echo "Expected Go toolchain: ${EXPECTED_GO_TOOLCHAIN}"
+          if [ -z "${EXPECTED_GO_VERSION}" ] || [ "${EXPECTED_GO_VERSION}" = "${IMAGE_WITHOUT_DIGEST}" ]; then
+            echo "Unable to derive expected Go version from go_image: ${GO_IMAGE}" >&2
+            exit 1
+          fi
+
+          echo "Expected Go version:   ${EXPECTED_GO_VERSION}"
           echo "Actual Go toolchain:   ${ACTUAL_GO_TOOLCHAIN}"
 
-          if [ "${ACTUAL_GO_TOOLCHAIN}" != "${EXPECTED_GO_TOOLCHAIN}" ]; then
-            echo "Pinned go_toolchain does not match go_image." >&2
+          if [ "${ACTUAL_GO_VERSION}" != "${EXPECTED_GO_VERSION}" ]; then
+            echo "Pinned go_image tag does not match the Go toolchain inside the image." >&2
             exit 1
           fi
 
