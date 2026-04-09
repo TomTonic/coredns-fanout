@@ -11,7 +11,7 @@
 
 It is aimed at users who want a simple, low-latency DNS cache for a laptop, homelab host, or home network and want to query multiple upstream resolvers in parallel instead of depending on a single upstream.
 
-The badges above reflect the versions that are actually shipped. Builds are produced from pinned dependencies in `build-versions.json` and published as multi-arch images for `amd64`, `arm64`, and `armhf`.
+The badges above reflect the versions that are actually shipped. Builds are produced from pinned dependencies in `build-versions.json` and published as multi-arch images for `amd64`, `arm64`, and `armhf`. The Go toolchain version is derived directly from the pinned Go builder image, so a Go update only needs one coherent dependency change.
 
 ## Image channels and releases
 

@@ -19,7 +19,6 @@ jobs:
       coredns_tag: ${{ steps.release.outputs.coredns_tag }}
       fanout_tag: ${{ steps.release.outputs.fanout_tag }}
       go_image: ${{ steps.release.outputs.go_image }}
-      go_toolchain: ${{ steps.release.outputs.go_toolchain }}
       runtime_base: ${{ steps.release.outputs.runtime_base }}
       go_version: ${{ steps.release.outputs.go_version }}
     permissions:
@@ -60,12 +59,25 @@ jobs:
           COREDNS_TAG=$(jq -r '.coredns_tag // ""' build-versions.json)
           FANOUT_TAG=$(jq -r '.fanout_tag // ""' build-versions.json)
           GO_IMAGE=$(jq -r '.go_image // ""' build-versions.json)
-          GO_TOOLCHAIN=$(jq -r '.go_toolchain // ""' build-versions.json)
           RUNTIME_BASE=$(jq -r '.runtime_base // ""' build-versions.json)
-          GO_VERSION=$(printf '%s' "${GO_TOOLCHAIN}" | sed 's/^go//' | awk '{print $1}')
+          IMAGE_WITHOUT_DIGEST="${GO_IMAGE%@*}"
+          IMAGE_TAG="${IMAGE_WITHOUT_DIGEST##*:}"
+          EXPECTED_GO_VERSION="${IMAGE_TAG%%-*}"
+          GO_TOOLCHAIN=$(docker run --rm --platform linux/amd64 "${GO_IMAGE}" go version | awk '{print $3, $4}')
+          GO_VERSION=$(printf '%s\n' "${GO_TOOLCHAIN}" | awk '{print $1}' | sed 's/^go//')
 
-          if [ -z "${COREDNS_TAG}" ] || [ -z "${FANOUT_TAG}" ] || [ -z "${GO_IMAGE}" ] || [ -z "${GO_TOOLCHAIN}" ] || [ -z "${RUNTIME_BASE}" ] || [ -z "${GO_VERSION}" ]; then
+          if [ -z "${COREDNS_TAG}" ] || [ -z "${FANOUT_TAG}" ] || [ -z "${GO_IMAGE}" ] || [ -z "${RUNTIME_BASE}" ] || [ -z "${GO_VERSION}" ]; then
             echo "build-versions.json is missing required release metadata." >&2
+            exit 1
+          fi
+
+          if [ -z "${EXPECTED_GO_VERSION}" ] || [ "${EXPECTED_GO_VERSION}" = "${IMAGE_WITHOUT_DIGEST}" ]; then
+            echo "Unable to derive expected Go version from go_image: ${GO_IMAGE}" >&2
+            exit 1
+          fi
+
+          if [ "${GO_VERSION}" != "${EXPECTED_GO_VERSION}" ]; then
+            echo "Pinned go_image tag does not match the Go toolchain inside the image." >&2
             exit 1
           fi
 
@@ -74,7 +86,6 @@ jobs:
             echo "coredns_tag=${COREDNS_TAG}"
             echo "fanout_tag=${FANOUT_TAG}"
             echo "go_image=${GO_IMAGE}"
-            echo "go_toolchain=${GO_TOOLCHAIN}"
             echo "runtime_base=${RUNTIME_BASE}"
             echo "go_version=${GO_VERSION}"
           } >> "$GITHUB_OUTPUT"
@@ -90,7 +101,6 @@ jobs:
       coredns_tag: ${{ needs.validate-release.outputs.coredns_tag }}
       fanout_tag: ${{ needs.validate-release.outputs.fanout_tag }}
       go_image: ${{ needs.validate-release.outputs.go_image }}
-      go_toolchain: ${{ needs.validate-release.outputs.go_toolchain }}
       runtime_base: ${{ needs.validate-release.outputs.runtime_base }}
       channel: stable
       publish_images: true
