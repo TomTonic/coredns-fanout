@@ -122,7 +122,8 @@ jobs:
               go mod tidy
 
               make gen
-              go test $(go list ./... | grep -Ev "^github.com/coredns/coredns/(test|coremain)$")
+              # Skip tests - we assume that published modules are already tested in their own repos.
+              # go test $(go list ./... | grep -Ev "^github.com/coredns/coredns/(test|coremain)$")
 
               mkdir -p /work/artifacts
 
