@@ -18,6 +18,7 @@ jobs:
       version: ${{ steps.release.outputs.version }}
       coredns_tag: ${{ steps.release.outputs.coredns_tag }}
       fanout_tag: ${{ steps.release.outputs.fanout_tag }}
+      filterlist_tag: ${{ steps.release.outputs.filterlist_tag }}
       go_image: ${{ steps.release.outputs.go_image }}
       runtime_base: ${{ steps.release.outputs.runtime_base }}
       go_version: ${{ steps.release.outputs.go_version }}
@@ -58,6 +59,7 @@ jobs:
 
           COREDNS_TAG=$(jq -r '.coredns_tag // ""' build-versions.json)
           FANOUT_TAG=$(jq -r '.fanout_tag // ""' build-versions.json)
+          FILTERLIST_TAG=$(jq -r '.filterlist_tag // ""' build-versions.json)
           GO_IMAGE=$(jq -r '.go_image // ""' build-versions.json)
           RUNTIME_BASE=$(jq -r '.runtime_base // ""' build-versions.json)
           IMAGE_WITHOUT_DIGEST="${GO_IMAGE%@*}"
@@ -66,7 +68,7 @@ jobs:
           GO_TOOLCHAIN=$(docker run --rm --platform linux/amd64 "${GO_IMAGE}" go version | awk '{print $3, $4}')
           GO_VERSION=$(printf '%s\n' "${GO_TOOLCHAIN}" | awk '{print $1}' | sed 's/^go//')
 
-          if [ -z "${COREDNS_TAG}" ] || [ -z "${FANOUT_TAG}" ] || [ -z "${GO_IMAGE}" ] || [ -z "${RUNTIME_BASE}" ] || [ -z "${GO_VERSION}" ]; then
+          if [ -z "${COREDNS_TAG}" ] || [ -z "${FANOUT_TAG}" ] || [ -z "${FILTERLIST_TAG}" ] || [ -z "${GO_IMAGE}" ] || [ -z "${RUNTIME_BASE}" ] || [ -z "${GO_VERSION}" ]; then
             echo "build-versions.json is missing required release metadata." >&2
             exit 1
           fi
@@ -85,6 +87,7 @@ jobs:
             echo "version=${VERSION}"
             echo "coredns_tag=${COREDNS_TAG}"
             echo "fanout_tag=${FANOUT_TAG}"
+            echo "filterlist_tag=${FILTERLIST_TAG}"
             echo "go_image=${GO_IMAGE}"
             echo "runtime_base=${RUNTIME_BASE}"
             echo "go_version=${GO_VERSION}"
@@ -100,6 +103,7 @@ jobs:
       version: ${{ needs.validate-release.outputs.version }}
       coredns_tag: ${{ needs.validate-release.outputs.coredns_tag }}
       fanout_tag: ${{ needs.validate-release.outputs.fanout_tag }}
+      filterlist_tag: ${{ needs.validate-release.outputs.filterlist_tag }}
       go_image: ${{ needs.validate-release.outputs.go_image }}
       runtime_base: ${{ needs.validate-release.outputs.runtime_base }}
       channel: stable
@@ -133,10 +137,11 @@ jobs:
             --arg v "${{ needs.validate-release.outputs.version }}" \
             --arg c "${{ needs.validate-release.outputs.coredns_tag }}" \
             --arg f "${{ needs.validate-release.outputs.fanout_tag }}" \
+            --arg fl "${{ needs.validate-release.outputs.filterlist_tag }}" \
             --arg g "${{ needs.validate-release.outputs.go_image }}" \
             --arg gv "${{ needs.validate-release.outputs.go_version }}" \
             --arg a "${{ needs.validate-release.outputs.runtime_base }}" \
-            '.version=$v | .coredns=$c | .fanout=$f | .go=$g | .go_version=$gv | .alpine=$a' \
+            '.version=$v | .coredns=$c | .fanout=$f | .filterlist=$fl | .go=$g | .go_version=$gv | .alpine=$a' \
             version.json > version.json.tmp
           mv version.json.tmp version.json
 
