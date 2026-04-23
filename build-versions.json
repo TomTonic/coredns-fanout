@@ -1,5 +1,5 @@
 {
-  "coredns_tag": "v1.14.2",
+  "coredns_tag": "v1.14.3",
   "fanout_tag": "v1.15.2",
   "go_image": "docker.io/library/golang:1.26.2-bookworm@sha256:47ce5636e9936b2c5cbf708925578ef386b4f8872aec74a67bd13a627d242b19",
   "runtime_base": "gcr.io/distroless/static-debian12:nonroot@sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1"
