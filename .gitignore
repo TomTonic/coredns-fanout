@@ -32,6 +32,3 @@ vendor/
 
 # Temp files
 *.tmp
-
-denylist/*
-!denylist/sources.txt
