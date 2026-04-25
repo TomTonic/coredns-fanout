@@ -5,6 +5,7 @@ SOURCES_FILE="${SOURCES_FILE:-/etc/coredns/denylist.d/sources.txt}"
 TARGET_DIR="${TARGET_DIR:-/etc/coredns/denylist.d}"
 DOWNLOAD_INTERVAL_SECONDS="${DOWNLOAD_INTERVAL_SECONDS:-21600}"
 TMP_DIR="${TARGET_DIR}/.tmp"
+LOCK_DIR="${TARGET_DIR}/.update.lock"
 
 if [ ! -f "${SOURCES_FILE}" ]; then
   echo "[filterlist-updater] sources file not found: ${SOURCES_FILE}" >&2
@@ -20,9 +21,27 @@ esac
 
 mkdir -p "${TARGET_DIR}" "${TMP_DIR}"
 
+acquire_lock() {
+  if mkdir "${LOCK_DIR}" 2>/dev/null; then
+    return 0
+  fi
+
+  echo "[filterlist-updater] another updater instance is already running" >&2
+  exit 1
+}
+
+cleanup() {
+  rm -f "${TMP_DIR}"/*.tmp 2>/dev/null || true
+  rmdir "${LOCK_DIR}" 2>/dev/null || true
+}
+
+trap cleanup EXIT INT TERM
+
+acquire_lock
+
 sanitize_name() {
   # Keep filenames predictable and safe for bind-mounted host filesystems.
-  printf '%s' "$1" | sed 's#[/[:space:]]#_#g'
+  printf '%s' "$1" | sed 's/[^A-Za-z0-9._-]/_/g'
 }
 
 download_once() {
@@ -41,32 +60,52 @@ download_once() {
         ;;
     esac
 
-    set -- ${line}
+    fields=$(printf '%s\n' "${line}" | awk '{ print NF }')
 
-    if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+    if [ "${fields}" -lt 1 ] || [ "${fields}" -gt 2 ]; then
       echo "[filterlist-updater] skipping invalid source line: ${line}" >&2
       continue
     fi
 
-    if [ "$#" -eq 1 ]; then
-      url="$1"
+    if [ "${fields}" -eq 1 ]; then
+      url="${line}"
       filename=$(basename "${url%%\?*}")
     else
-      filename="$1"
-      url="$2"
+      filename=$(printf '%s\n' "${line}" | awk '{ print $1 }')
+      url=$(printf '%s\n' "${line}" | awk '{ print $2 }')
     fi
+
+    case "${url}" in
+      http://*|https://*)
+        ;;
+      *)
+        echo "[filterlist-updater] skipping source with unsupported URL scheme: ${url}" >&2
+        continue
+        ;;
+    esac
 
     if [ -z "${filename}" ] || [ "${filename}" = "/" ] || [ "${filename}" = "." ]; then
       filename="list-${downloaded}.txt"
     fi
 
     safe_name=$(sanitize_name "${filename}")
+
+    if [ -z "${safe_name}" ] || [ "${safe_name}" = "." ] || [ "${safe_name}" = ".." ]; then
+      filename="list-${downloaded}.txt"
+      safe_name="${filename}"
+    fi
+
     tmp_file="${TMP_DIR}/${safe_name}.tmp"
     target_file="${TARGET_DIR}/${safe_name}"
 
     echo "[filterlist-updater] downloading ${url} -> ${safe_name}"
-    curl --fail --show-error --silent --location --retry 3 --connect-timeout 15 \
-      --max-time 120 "${url}" -o "${tmp_file}"
+    if ! curl --fail --show-error --silent --location --retry 3 --connect-timeout 15 \
+      --max-time 120 "${url}" -o "${tmp_file}"; then
+      echo "[filterlist-updater] download failed for ${url}" >&2
+      rm -f "${tmp_file}" 2>/dev/null || true
+      continue
+    fi
+
     mv "${tmp_file}" "${target_file}"
 
     downloaded=$((downloaded + 1))
