@@ -6,7 +6,11 @@ services:
     entrypoint: [/bin/sh, -ec]
     command: |
       apk add --no-cache curl ca-certificates
-      sh /usr/local/bin/update-denylists.sh
+      curl --fail --show-error --silent --location \
+        -o /usr/local/bin/update-denylists.sh \
+        https://raw.githubusercontent.com/TomTonic/coredns-fanout/refs/heads/main/scripts/update-denylists.sh
+      chmod 755 /usr/local/bin/update-denylists.sh
+      exec /usr/local/bin/update-denylists.sh
     environment:
       # Download interval in seconds (default: 6h).
       DOWNLOAD_INTERVAL_SECONDS: ${FILTERLIST_DOWNLOAD_INTERVAL_SECONDS:-21600}
@@ -14,7 +18,6 @@ services:
       TARGET_DIR: /etc/coredns/denylist.d
     volumes:
       - ./denylist:/etc/coredns/denylist.d
-      - ./scripts/update-denylists.sh:/usr/local/bin/update-denylists.sh:ro
     restart: unless-stopped
 
   coredns:
