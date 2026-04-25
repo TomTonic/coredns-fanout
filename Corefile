@@ -15,13 +15,6 @@
     bufsize 1232
     local
 
-    # Domain filtering happens before fanout so blocked names never reach
-    # upstream resolvers.
-    filterlist {
-        denylist_dir /etc/coredns/denylist.d
-        action nxdomain
-    }
-
     # Mixed fanout setup:
     # - four local DoT forward stubs for IP-address-based upstreams
     # - one DoH endpoint over HTTP/2
