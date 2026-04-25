@@ -91,9 +91,8 @@ mkdir coredns-fanout
 cd coredns-fanout
 curl -O https://raw.githubusercontent.com/TomTonic/coredns-fanout/refs/heads/main/docker-compose.yml
 curl -O https://raw.githubusercontent.com/TomTonic/coredns-fanout/refs/heads/main/Corefile
-mkdir -p denylist scripts
+mkdir -p denylist
 curl -o denylist/sources.txt https://raw.githubusercontent.com/TomTonic/coredns-fanout/refs/heads/main/denylist/sources.txt
-curl -o scripts/update-denylists.sh https://raw.githubusercontent.com/TomTonic/coredns-fanout/refs/heads/main/scripts/update-denylists.sh
 docker compose up -d
 dig github.com @127.0.0.1
 ```
@@ -101,7 +100,7 @@ dig github.com @127.0.0.1
 Important details:
 
 - The shipped Compose file uses `network_mode: host`. That is the most straightforward option on a Linux host.
-- The shipped Compose file includes a `filterlist-updater` service that downloads enabled lists from `denylist/sources.txt` into `denylist/`.
+- The shipped Compose file includes a `filterlist-updater` service that downloads its updater script automatically and then fetches enabled lists from `denylist/sources.txt` into `denylist/`.
 - The update interval is configurable with `FILTERLIST_DOWNLOAD_INTERVAL_SECONDS` (default: `21600`, i.e. 6 hours).
 - The example `Corefile` binds to `127.0.0.1` and `::1` by default. That is suitable for a cache on one machine. For a LAN resolver, change the bind addresses to the host's LAN IP addresses.
 - The shipped `Corefile` always enables Prometheus metrics on `127.0.0.1:9153`.
