@@ -1,10 +1,33 @@
 ---
 services:
+  filterlist-updater:
+    container_name: dns-filterlist-updater
+    image: alpine:latest
+    entrypoint: [/bin/sh, -ec]
+    command: |
+      apk add --no-cache curl ca-certificates
+      curl --fail --show-error --silent --location \
+        -o /usr/local/bin/update-denylists.sh \
+        https://raw.githubusercontent.com/TomTonic/coredns-fanout/refs/heads/main/scripts/update-denylists.sh
+      chmod 755 /usr/local/bin/update-denylists.sh
+      exec /usr/local/bin/update-denylists.sh
+    environment:
+      # Download interval in seconds (default: 6h).
+      DOWNLOAD_INTERVAL_SECONDS: ${FILTERLIST_DOWNLOAD_INTERVAL_SECONDS:-21600}
+      SOURCES_FILE: /etc/coredns/denylist.d/sources.txt
+      TARGET_DIR: /etc/coredns/denylist.d
+    volumes:
+      - ./denylist:/etc/coredns/denylist.d
+    restart: unless-stopped
+
   coredns:
     container_name: dns-cache
     image: tomtonic/coredns-fanout:latest
     command: -conf /etc/coredns/Corefile
     network_mode: host
+    depends_on:
+      filterlist-updater:
+        condition: service_started
     volumes:
       - .:/etc/coredns:ro
     restart: unless-stopped
