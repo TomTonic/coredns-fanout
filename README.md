@@ -7,11 +7,23 @@
 ![Built with Go toolchain](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FTomTonic%2Fcoredns-fanout%2Frefs%2Fheads%2Fmain%2Fversion.json&query=%24.go_version&prefix=v&label=Built%20with%20Go%20toolchain&color=blue)
 [![Vulnerabilities of Docker Image](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/TomTonic/f925f1cacde626864f41dd3fc86d43b2/raw/coredns_fanout-docker_image.json)](https://gist.github.com/TomTonic/f925f1cacde626864f41dd3fc86d43b2#file-coredns_fanout-docker_image-md)
 
-`coredns-fanout` is a Docker image for a fast local DNS cache built with [CoreDNS](https://github.com/coredns/coredns) and the maintained [TomTonic/fanout](https://github.com/TomTonic/fanout) plugin. The image is available on [Docker Hub](https://hub.docker.com/r/tomtonic/coredns-fanout/).
+`coredns-fanout` is a Docker image for a fast local DNS cache built with [CoreDNS](https://github.com/coredns/coredns), [TomTonic/filterlist](https://github.com/TomTonic/filterlist), and the maintained [TomTonic/fanout](https://github.com/TomTonic/fanout) plugin. The image is available on [Docker Hub](https://hub.docker.com/r/tomtonic/coredns-fanout/).
 
 It is aimed at users who want a simple, low-latency DNS cache for a laptop, homelab host, or home network and want to query multiple upstream resolvers in parallel instead of depending on a single upstream.
 
 The badges above reflect the versions that are actually shipped. Builds are produced from pinned dependencies in `build-versions.json` and published as multi-arch images for `amd64`, `arm64`, and `armhf`. The Go toolchain version is derived directly from the pinned Go builder image, so a Go update only needs one coherent dependency change.
+
+## Built-in domain filtering
+
+The image now includes the `filterlist` plugin and the shipped `Corefile` places it before `fanout` so blocked names never reach upstream resolvers.
+
+The default setup uses:
+
+- `filterlist` with `denylist_dir /etc/coredns/denylist.d`
+- `action nxdomain` for blocked domains
+- hot-reload behavior from `filterlist` when list files in that directory change
+
+The included Compose stack also starts a small updater service that regularly downloads denylist files into that directory.
 
 ## Image channels and releases
 
@@ -79,6 +91,8 @@ mkdir coredns-fanout
 cd coredns-fanout
 curl -O https://raw.githubusercontent.com/TomTonic/coredns-fanout/refs/heads/main/docker-compose.yml
 curl -O https://raw.githubusercontent.com/TomTonic/coredns-fanout/refs/heads/main/Corefile
+mkdir -p denylist
+curl -o denylist/sources.txt https://raw.githubusercontent.com/TomTonic/coredns-fanout/refs/heads/main/denylist/sources.txt
 docker compose up -d
 dig github.com @127.0.0.1
 ```
@@ -86,9 +100,29 @@ dig github.com @127.0.0.1
 Important details:
 
 - The shipped Compose file uses `network_mode: host`. That is the most straightforward option on a Linux host.
+- The shipped Compose file includes a `filterlist-updater` service that downloads its updater script automatically and then fetches enabled lists from `denylist/sources.txt` into `denylist/`.
+- The update interval is configurable with `FILTERLIST_DOWNLOAD_INTERVAL_SECONDS` (default: `21600`, i.e. 6 hours).
 - The example `Corefile` binds to `127.0.0.1` and `::1` by default. That is suitable for a cache on one machine. For a LAN resolver, change the bind addresses to the host's LAN IP addresses.
 - The shipped `Corefile` always enables Prometheus metrics on `127.0.0.1:9153`.
 - Docker automatically pulls the correct image for your CPU architecture.
+
+## Managing filter list sources
+
+Filter downloads are controlled by `denylist/sources.txt`.
+
+- One source per line
+- Empty lines and lines starting with `#` are ignored
+- Supported formats:
+    - `URL`
+    - `output-filename URL`
+
+Default entry:
+
+```text
+adguard-filter.txt https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt
+```
+
+The shipped file already contains three additional example sources as commented lines. Uncomment them (or add your own) to enable more lists.
 
 ## What the shipped example actually does
 

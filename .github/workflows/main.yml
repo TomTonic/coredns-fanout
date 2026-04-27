@@ -25,6 +25,7 @@ jobs:
       image_version: ${{ steps.version.outputs.image_version }}
       coredns_tag: ${{ steps.deps.outputs.coredns_tag }}
       fanout_tag: ${{ steps.deps.outputs.fanout_tag }}
+      filterlist_tag: ${{ steps.deps.outputs.filterlist_tag }}
       go_image: ${{ steps.deps.outputs.go_image }}
       runtime_base: ${{ steps.deps.outputs.runtime_base }}
     permissions:
@@ -48,10 +49,11 @@ jobs:
 
           COREDNS_TAG=$(jq -r '.coredns_tag // ""' "${FILE}")
           FANOUT_TAG=$(jq -r '.fanout_tag // ""' "${FILE}")
+          FILTERLIST_TAG=$(jq -r '.filterlist_tag // ""' "${FILE}")
           GO_IMAGE=$(jq -r '.go_image // ""' "${FILE}")
           RUNTIME_BASE=$(jq -r '.runtime_base // ""' "${FILE}")
 
-          if [ -z "${COREDNS_TAG}" ] || [ -z "${FANOUT_TAG}" ] || [ -z "${GO_IMAGE}" ] || [ -z "${RUNTIME_BASE}" ]; then
+          if [ -z "${COREDNS_TAG}" ] || [ -z "${FANOUT_TAG}" ] || [ -z "${FILTERLIST_TAG}" ] || [ -z "${GO_IMAGE}" ] || [ -z "${RUNTIME_BASE}" ]; then
             echo "${FILE} is missing required values." >&2
             exit 1
           fi
@@ -59,6 +61,7 @@ jobs:
           {
             echo "coredns_tag=${COREDNS_TAG}"
             echo "fanout_tag=${FANOUT_TAG}"
+            echo "filterlist_tag=${FILTERLIST_TAG}"
             echo "go_image=${GO_IMAGE}"
             echo "runtime_base=${RUNTIME_BASE}"
           } >> "$GITHUB_OUTPUT"
@@ -75,11 +78,13 @@ jobs:
 
           NEW_COREDNS="${{ steps.deps.outputs.coredns_tag }}"
           NEW_FANOUT="${{ steps.deps.outputs.fanout_tag }}"
+          NEW_FILTERLIST="${{ steps.deps.outputs.filterlist_tag }}"
           NEW_GO_IMAGE="${{ steps.deps.outputs.go_image }}"
           NEW_RUNTIME_BASE="${{ steps.deps.outputs.runtime_base }}"
 
           STORED_COREDNS=$(jq -r '.coredns // ""' version.json)
           STORED_FANOUT=$(jq -r '.fanout // ""' version.json)
+          STORED_FILTERLIST=$(jq -r '.filterlist // ""' version.json)
           STORED_GO_IMAGE=$(jq -r '.go // ""' version.json)
           STORED_RUNTIME_BASE=$(jq -r '.alpine // ""' version.json)
           STORED_VERSION=$(jq -r '.version // "2.0.0"' version.json)
@@ -87,11 +92,12 @@ jobs:
           SHORT_SHA=$(printf '%s' "${GIT_SHA}" | cut -c1-7)
           TEST_SUFFIX="test.${GIT_RUN_NUMBER}.${GIT_RUN_ATTEMPT}.${SHORT_SHA}"
 
-          echo "Released state: coredns=${STORED_COREDNS} fanout=${STORED_FANOUT} go_image=${STORED_GO_IMAGE} runtime_base=${STORED_RUNTIME_BASE} version=${STORED_VERSION}"
-          echo "Candidate deps: coredns=${NEW_COREDNS} fanout=${NEW_FANOUT} go_image=${NEW_GO_IMAGE} runtime_base=${NEW_RUNTIME_BASE}"
+          echo "Released state: coredns=${STORED_COREDNS} fanout=${STORED_FANOUT} filterlist=${STORED_FILTERLIST} go_image=${STORED_GO_IMAGE} runtime_base=${STORED_RUNTIME_BASE} version=${STORED_VERSION}"
+          echo "Candidate deps: coredns=${NEW_COREDNS} fanout=${NEW_FANOUT} filterlist=${NEW_FILTERLIST} go_image=${NEW_GO_IMAGE} runtime_base=${NEW_RUNTIME_BASE}"
 
           if [ "${NEW_COREDNS}" = "${STORED_COREDNS}" ] && \
              [ "${NEW_FANOUT}" = "${STORED_FANOUT}" ] && \
+             [ "${NEW_FILTERLIST}" = "${STORED_FILTERLIST}" ] && \
              [ "${NEW_GO_IMAGE}" = "${STORED_GO_IMAGE}" ] && \
              [ "${NEW_RUNTIME_BASE}" = "${STORED_RUNTIME_BASE}" ]; then
             if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
@@ -162,6 +168,7 @@ jobs:
       version: ${{ needs.determine-version.outputs.image_version }}
       coredns_tag: ${{ needs.determine-version.outputs.coredns_tag }}
       fanout_tag: ${{ needs.determine-version.outputs.fanout_tag }}
+      filterlist_tag: ${{ needs.determine-version.outputs.filterlist_tag }}
       go_image: ${{ needs.determine-version.outputs.go_image }}
       runtime_base: ${{ needs.determine-version.outputs.runtime_base }}
       channel: test
@@ -178,6 +185,7 @@ jobs:
       version: ${{ needs.determine-version.outputs.image_version }}
       coredns_tag: ${{ needs.determine-version.outputs.coredns_tag }}
       fanout_tag: ${{ needs.determine-version.outputs.fanout_tag }}
+      filterlist_tag: ${{ needs.determine-version.outputs.filterlist_tag }}
       go_image: ${{ needs.determine-version.outputs.go_image }}
       runtime_base: ${{ needs.determine-version.outputs.runtime_base }}
       channel: test
