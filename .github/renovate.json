@@ -42,6 +42,18 @@
         "/^build-versions\\.json$/"
       ],
       "matchStrings": [
+        "\"filterlist_tag\"\\s*:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "depNameTemplate": "TomTonic/filterlist",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^build-versions\\.json$/"
+      ],
+      "matchStrings": [
         "\"go_image\"\\s*:\\s*\"(?<depName>docker\\.io/library/golang)(?::(?<currentValue>[^\"@]+))?(?:@(?<currentDigest>sha256:[a-f0-9]+))?\""
       ],
       "datasourceTemplate": "docker"
