@@ -1,33 +1,92 @@
 ---
 services:
-  filterlist-updater:
-    container_name: dns-filterlist-updater
-    image: alpine:latest
-    entrypoint: [/bin/sh, -ec]
-    command: |
-      apk add --no-cache curl ca-certificates
-      curl --fail --show-error --silent --location \
-        -o /usr/local/bin/update-denylists.sh \
-        https://raw.githubusercontent.com/TomTonic/coredns-fanout/refs/heads/main/scripts/update-denylists.sh
-      chmod 755 /usr/local/bin/update-denylists.sh
-      exec /usr/local/bin/update-denylists.sh
-    environment:
-      # Download interval in seconds (default: 6h).
-      DOWNLOAD_INTERVAL_SECONDS: ${FILTERLIST_DOWNLOAD_INTERVAL_SECONDS:-21600}
-      SOURCES_FILE: /etc/coredns/denylist.d/sources.txt
-      TARGET_DIR: /etc/coredns/denylist.d
-    volumes:
-      - ./denylist:/etc/coredns/denylist.d
-    restart: unless-stopped
-
   coredns:
     container_name: dns-cache
     image: tomtonic/coredns-fanout:latest
     command: -conf /etc/coredns/Corefile
     network_mode: host
-    depends_on:
-      filterlist-updater:
-        condition: service_started
     volumes:
       - .:/etc/coredns:ro
     restart: unless-stopped
+
+  # Example updater service using ghcr.io/tomtonic/websyncd.
+  # Disabled by default via the `updaters` profile — start with:
+  #   docker compose --profile updaters up
+  # or:
+  #   COMPOSE_PROFILES=updaters docker compose up
+  # or delete the line profiles: ["updaters"] to enable this service by default
+  # You can add additional updater services by copying this block and
+  # adjusting `RESOURCE_URL` / `OUTPUT_PATH` as needed.
+  # See https://github.com/TomTonic/websyncd for parameter details.
+  denylist-updater-adguard-filter:
+    profiles: ["updaters"]
+    image: ghcr.io/tomtonic/websyncd:latest
+    environment:
+      RESOURCE_URL: https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt
+      OUTPUT_PATH: /etc/coredns/denylist.d/adguard-filter.txt
+      POLL_INTERVAL: 3h
+      HEARTBEAT_ADDR: :8081
+    volumes:
+      - ./denylists:/etc/coredns/denylist.d
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS --max-time 2 http://127.0.0.1:8081/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # Example updater service using ghcr.io/tomtonic/websyncd.
+  # Disabled by default via the `updaters` profile — start with:
+  #   docker compose --profile updaters up
+  # or:
+  #   COMPOSE_PROFILES=updaters docker compose up
+  # or delete the line profiles: ["updaters"] to enable this service by default
+  # You can add additional updater services by copying this block and
+  # adjusting `RESOURCE_URL` / `OUTPUT_PATH` as needed.
+  # See https://github.com/TomTonic/websyncd for parameter details.
+  denylist-updater-stevenblack-hosts:
+    profiles: ["updaters"]
+    image: ghcr.io/tomtonic/websyncd:latest
+    environment:
+      RESOURCE_URL: https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+      OUTPUT_PATH: /etc/coredns/denylist.d/stevenblack-hosts.txt
+      POLL_INTERVAL: 6h
+      HEARTBEAT_ADDR: :8081
+    volumes:
+      - ./denylists:/etc/coredns/denylist.d
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS --max-time 2 http://127.0.0.1:8081/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # Example updater service using ghcr.io/tomtonic/websyncd.
+  # Disabled by default via the `updaters` profile — start with:
+  #   docker compose --profile updaters up
+  # or:
+  #   COMPOSE_PROFILES=updaters docker compose up
+  # or delete the line profiles: ["updaters"] to enable this service by default
+  # You can add additional updater services by copying this block and
+  # adjusting `RESOURCE_URL` / `OUTPUT_PATH` as needed.
+  # See https://github.com/TomTonic/websyncd for parameter details.
+  denylist-updater-oisd-small:
+    profiles: ["updaters"]
+    image: ghcr.io/tomtonic/websyncd:latest
+    environment:
+      RESOURCE_URL: https://small.oisd.nl
+      OUTPUT_PATH: /etc/coredns/denylist.d/oisd-small.txt
+      POLL_INTERVAL: 6h
+      HEARTBEAT_ADDR: :8081
+    volumes:
+      - ./denylists:/etc/coredns/denylist.d
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS --max-time 2 http://127.0.0.1:8081/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+

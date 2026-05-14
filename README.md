@@ -25,6 +25,8 @@ The default setup uses:
 
 The included Compose stack also starts a small updater service that regularly downloads denylist files into that directory.
 
+Note: the updater services in the example `docker-compose.yml` are provided as examples and are disabled by default using a Compose profile named `updaters`. To run them, use `docker compose --profile updaters up` or set `COMPOSE_PROFILES=updaters`. Alternatively, remove the line `profiles: ["updaters"]` from the service block to enable the updater permanently.
+
 ## Image channels and releases
 
 This repository now publishes two clearly separated image channels:
