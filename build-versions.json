@@ -1,6 +1,6 @@
 {
   "coredns_tag": "v1.14.3",
-  "fanout_tag": "v1.15.5",
+  "fanout_tag": "v1.15.6",
   "filterlist_tag": "v0.1.2",
   "go_image": "docker.io/library/golang:1.26.3-bookworm@sha256:252599aeb51ad60b83e4d8821802068127c528c707cb7dd7afd93be057c6011c",
   "runtime_base": "gcr.io/distroless/static-debian12:nonroot@sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1"
