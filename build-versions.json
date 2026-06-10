@@ -1,5 +1,5 @@
 {
-  "coredns_tag": "v1.14.3",
+  "coredns_tag": "v1.14.4",
   "fanout_tag": "v1.15.7",
   "filterlist_tag": "v0.1.4",
   "go_image": "docker.io/library/golang:1.26.4-bookworm@sha256:5d2b868674b57c9e48cdd39e891acce4196b6926ca6d11e9c270a8f85106203d",
