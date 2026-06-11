@@ -69,7 +69,23 @@
       "datasourceTemplate": "docker"
     }
   ],
+  // Default PR title for all dependency updates
+  "prTitleTemplate": "Update dependency {{depName}} from {{currentVersion}} → {{newVersion}}",
+  // PR body should contain only release notes
+  "prBodyTemplate": "{{{body}}}",
   "packageRules": [
+    // Special case: Go modules
+    {
+      "matchManagers": ["gomod"],
+      "prTitleTemplate": "Update source code dependency {{depName}} from {{currentVersion}} → {{newVersion}}",
+      "prBodyTemplate": "{{{body}}}"
+    },
+    // Special case: GitHub Actions
+    {
+      "matchManagers": ["github-actions"],
+      "prTitleTemplate": "Update build process dependency {{depName}} from {{currentVersion}} → {{newVersion}}",
+      "prBodyTemplate": "{{{body}}}"
+    },
     {
       "matchManagers": [
         "custom.regex"
