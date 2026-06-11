@@ -69,17 +69,20 @@
       "datasourceTemplate": "docker"
     }
   ],
-  "prTitle": "Update dependency {{depName}} from {{currentVersion}} to {{newVersion}}",
+  "commitMessagePrefix": "[auto]",
+  "commitMessageAction": "Update dependency",
+  "commitMessageTopic": "{{depName}}",
+  "commitMessageExtra": "from {{currentVersion}} to {{newVersion}}",
   "packageRules": [
     // Special case: Go modules
     {
       "matchManagers": ["gomod"],
-      "prTitle": "Update source code dependency {{depName}} from {{currentVersion}} → {{newVersion}}",
+      "commitMessageAction": "Update source code dependency",
     },
     // Special case: GitHub Actions
     {
       "matchManagers": ["github-actions"],
-      "prTitle": "Update build process dependency {{depName}} from {{currentVersion}} → {{newVersion}}",
+      "commitMessageAction": "Update build process dependency",
     },
     {
       "matchManagers": [
