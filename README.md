@@ -8,336 +8,185 @@
 ![Built with Go toolchain](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FTomTonic%2Fcoredns-fanout%2Frefs%2Fheads%2Fmain%2Fversion.json&query=%24.go_version&prefix=v&label=Built%20with%20Go%20toolchain&color=blue)
 [![Vulnerabilities of Docker Image](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/TomTonic/f925f1cacde626864f41dd3fc86d43b2/raw/coredns_fanout-docker_image.json)](https://gist.github.com/TomTonic/f925f1cacde626864f41dd3fc86d43b2#file-coredns_fanout-docker_image-md)
 
-`coredns-fanout` is a Docker image for a fast local DNS cache built with [CoreDNS](https://github.com/coredns/coredns), [TomTonic/filterlist](https://github.com/TomTonic/filterlist), and the maintained [TomTonic/fanout](https://github.com/TomTonic/fanout) plugin. The image is available on [Docker Hub](https://hub.docker.com/r/tomtonic/coredns-fanout/).
+`coredns-fanout` is a small, fully text-configurable DNS cache and ad/tracker
+blocker for a laptop, homelab host, or whole home network. It is a Docker image
+built on [CoreDNS](https://github.com/coredns/coredns) with two plugins:
+[TomTonic/filterlist](https://github.com/TomTonic/filterlist) for domain
+blocking and the maintained [TomTonic/fanout](https://github.com/TomTonic/fanout)
+plugin for querying several upstream resolvers in parallel. It is available on
+[Docker Hub](https://hub.docker.com/r/tomtonic/coredns-fanout/).
 
-It is aimed at users who want a simple, low-latency DNS cache for a laptop, homelab host, or home network and want to query multiple upstream resolvers in parallel instead of depending on a single upstream.
+Unlike a single-upstream forwarder, `fanout` sends each query to several
+resolvers at once and returns the first usable answer — so one slow or flaky
+upstream no longer decides your latency. You can mix plain DNS, DoT, DoH (HTTP/2),
+DoH3 (HTTP/3), and DoQ in a single configuration.
 
-The badges above reflect the versions that are actually shipped. Builds are produced from pinned dependencies in `build-versions.json` and published as multi-arch images for `amd64`, `arm64`, and `armhf`. The Go toolchain version is derived directly from the pinned Go builder image, so a Go update only needs one coherent dependency change.
+## Is it the right tool for you?
 
-## Built-in domain filtering
+It is a good alternative to **Pi-hole**, **AdGuard Home**, or **dnsproxy** if
+you want:
 
-The image now includes the `filterlist` plugin and the shipped `Corefile` places it before `fanout` so blocked names never reach upstream resolvers.
+- **Blocking *and* fast resolution in one place** — denylists/allowlists in
+  AdGuard, EasyList/ABP, and hosts formats, combined with parallel encrypted
+  upstreams and a tuned cache.
+- **Plain-text configuration** — a single `Corefile`, no database and no admin
+  UI. Keep it in git and deploy it reproducibly.
+- **Mixed encrypted transports** — DoT, DoH, DoH3, and DoQ, freely combined in
+  one `fanout` block, with first-usable-answer racing.
+- **A tiny footprint** — a distroless, multi-arch image (`amd64`, `arm64`,
+  `armhf`) from pinned, reproducible builds.
+- **First-class metrics** — a Prometheus endpoint with per-upstream latency,
+  RCODE, and error counters built in.
 
-The default setup uses:
+Look elsewhere if you want an all-in-one appliance with a **web dashboard,
+per-client rules, a query-log browser, or built-in DHCP** — AdGuard Home or
+Pi-hole fit that better. `coredns-fanout` is a resolver, cache, and filter you
+configure as code and observe with Prometheus/Grafana, not a bundled UI.
 
-- `filterlist` with `denylist_dir /etc/coredns/denylist.d`
-- `action nxdomain` for blocked domains
-- hot-reload behavior from `filterlist` when list files in that directory change
+## Built for performance
 
-The included Compose stack also starts a small updater service that regularly downloads denylist files into that directory.
+Every component is chosen and tuned so the request hot path stays fast and the
+parts work together without wasted effort:
 
-Note: the updater services in the example `docker-compose.yml` are provided as examples and are disabled by default using a Compose profile named `updaters`. To run them, use `docker compose --profile updaters up` or set `COMPOSE_PROFILES=updaters`. Alternatively, remove the line `profiles: ["updaters"]` from the service block to enable the updater permanently.
+- **Filtering in ~200 ns per query.** `filterlist` uses a hybrid matcher: exact
+  domains live in a suffix hash map (O(1) lookup), while wildcard rules compile
+  into a minimized DFA. A typical AdGuard list compiles in well under a second,
+  and lookups add roughly 0.0002 ms to a query.
+- **Reloads never stall lookups.** When a list changes, `filterlist` recompiles
+  in the background and swaps the active matcher **atomically and lock-free** —
+  queries keep being answered at full speed during the swap, and a broken list
+  is rejected while the previous one stays live.
+- **Fastest usable answer wins.** `fanout`'s `race` returns the first valid
+  response and cancels the remaining in-flight queries immediately. With
+  `race-continue-on-error` a fast `SERVFAIL` or transport failure cannot win
+  early, while `NOERROR`/`NXDOMAIN` still end the race at once — you get the
+  speed of racing without losing answers to a flaky upstream.
+- **Connections are reused, not rebuilt.** The maintained `fanout` fork keeps
+  pooled TCP/TLS/QUIC connections with liveness checks and retry-on-stream-
+  failure, so sustained load does not pay repeated handshake costs.
+  `worker-count` and `weighted-random` let you cap concurrency and spread load
+  instead of hitting every upstream on every query.
+- **The cache answers instantly.** CoreDNS `prefetch` refreshes popular entries
+  before they expire, and `serve_stale … immediate` returns a stale answer
+  right away while refreshing it in the background — clients never wait on a
+  slow upstream.
+- **Updates only when something actually changed.** `websyncd` polls each list
+  with a conditional `HEAD`/`GET` (ETag / Last-Modified) and rewrites the file
+  **only when the content really changed**, using an atomic write. No needless
+  downloads, no partial files, and — crucially — no unnecessary `filterlist`
+  recompiles, so the updater and the matcher stay out of each other's way.
 
-## Image channels and releases
-
-This repository now publishes two clearly separated image channels:
-
-- Test images are built automatically when `build-versions.json` changes on `main`. They are published as immutable pre-release style tags such as `tomtonic/coredns-fanout:v2.5.0-test.104.1.a1b2c3d` plus the floating tag `tomtonic/coredns-fanout:test`.
-- Production images are published only when a GitHub Release is explicitly created. That workflow publishes `tomtonic/coredns-fanout:vX.Y.Z` and the floating production tags `vX.Y`, `vX`, and `latest`.
-- The GitHub Release tag is the source of truth for production version numbers. After a successful production release, the workflow automatically syncs `version.json` (including `.version`) on `main`.
-
-That means you can still pull and test CI-built images normally, but they are always unmistakably marked as non-production by the `-test...` suffix. The stable tags never move unless you create a GitHub Release on purpose.
-
-Examples:
-
-```bash
-# latest automatic test build
-docker pull tomtonic/coredns-fanout:test
-
-# specific immutable test build
-docker pull tomtonic/coredns-fanout:v2.5.0-test.104.1.a1b2c3d
-
-# explicit production release
-docker pull tomtonic/coredns-fanout:v2.4.0
-docker pull tomtonic/coredns-fanout:latest
-```
-
-### Releasing for production
-
-The production workflow is intentionally explicit:
-
-1. Update `build-versions.json` to the dependency set you want to ship.
-2. Merge that state to `main` and let the automatic `-test` image build finish.
-3. Create a GitHub Release with the tag `vX.Y.Z`.
-4. The release workflow publishes production images and then updates `version.json` on `main` to match that release tag and metadata.
-
-## Why use it
-
-- CoreDNS runs as a local cache in front of your upstream resolvers.
-- The `fanout` plugin sends each DNS query to multiple upstreams in parallel.
-- The first usable response wins instead of waiting on a single resolver.
-- You can combine classic and encrypted upstream transports.
-- The runtime image is small and distroless, and the build chain is pinned for reproducibility.
-
-In practice that means faster lookups, better tolerance for weak upstreams, and a setup that scales from a single-machine cache to a resolver for an entire home network.
-
-## Why the TomTonic fork matters
-
-This image deliberately uses [TomTonic/fanout](https://github.com/TomTonic/fanout) instead of the original [networkservicemesh/fanout](https://github.com/networkservicemesh/fanout).
-
-For someone who just wants a dependable local DNS cache, the relevant differences are:
-
-- More upstream protocols. In addition to UDP, TCP, and DoT, the fork supports DoH over HTTP/2, DoH3 over HTTP/3, and DoQ. You can even mix these transports in one `fanout` block.
-- Better behavior when a fast upstream returns a bad answer. With `race-continue-on-error`, transport failures and error responses such as `SERVFAIL` do not automatically beat a slightly slower successful response. In the intended race behavior for this image, `NXDOMAIN` is treated as a valid terminal DNS answer and should still be allowed to end the race early.
-- Harder, more resilient transport handling. The fork adds stronger connection reuse and pooling for HTTPS and QUIC, plus more robust handling around failed streams and unhealthy connections.
-- Better observability. The fork exposes additional error metrics per upstream via the prometheus endpoint.
-- Better supply-chain hygiene. The maintained fork follows current CoreDNS and Go releases and trims away unnecessary dependency surface.
-
-For a home network, that mainly translates into lower latency, more transport options, and fewer situations where one flaky resolver spoils the overall result.
+The runtime is a small distroless, multi-arch image from pinned, reproducible
+builds, so the performance profile is the same everywhere it runs.
 
 ## Quick start
 
-The shipped example is designed as a practical starting point for a local DNS cache:
-
 ```bash
-mkdir coredns-fanout
-cd coredns-fanout
+mkdir my-dns && cd my-dns
 curl -O https://raw.githubusercontent.com/TomTonic/coredns-fanout/refs/heads/main/docker-compose.yml
 curl -O https://raw.githubusercontent.com/TomTonic/coredns-fanout/refs/heads/main/Corefile
-mkdir -p denylist
-curl -o denylist/sources.txt https://raw.githubusercontent.com/TomTonic/coredns-fanout/refs/heads/main/denylist/sources.txt
+mkdir -p denylists
+
+# Start the cache with parallel encrypted upstreams
 docker compose up -d
 dig github.com @127.0.0.1
+
+# Add ad/tracker blocking by also starting the bundled filter-list updaters
+docker compose --profile updaters up -d
 ```
 
-Important details:
+Defaults of the shipped example:
 
-- The shipped Compose file uses `network_mode: host`. That is the most straightforward option on a Linux host.
-- The shipped Compose file includes a `filterlist-updater` service that downloads its updater script automatically and then fetches enabled lists from `denylist/sources.txt` into `denylist/`.
-- The update interval is configurable with `FILTERLIST_DOWNLOAD_INTERVAL_SECONDS` (default: `21600`, i.e. 6 hours).
-- The example `Corefile` binds to `127.0.0.1` and `::1` by default. That is suitable for a cache on one machine. For a LAN resolver, change the bind addresses to the host's LAN IP addresses.
-- The shipped `Corefile` always enables Prometheus metrics on `127.0.0.1:9153`.
-- Docker automatically pulls the correct image for your CPU architecture.
-
-## Managing filter list sources
-
-Filter downloads are controlled by `denylist/sources.txt`.
-
-- One source per line
-- Empty lines and lines starting with `#` are ignored
-- Supported formats:
-    - `URL`
-    - `output-filename URL`
-
-Default entry:
-
-```text
-adguard-filter.txt https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt
-```
-
-The shipped file already contains three additional example sources as commented lines. Uncomment them (or add your own) to enable more lists.
-
-## What the shipped example actually does
-
-The repository includes a practical mixed-protocol example in `docker-compose.yml` and `Corefile`:
-
-- CoreDNS listens on port `53` on the host network.
+- `docker-compose.yml` uses `network_mode: host` — the simplest option on a
+  Linux host.
+- The `Corefile` binds to `127.0.0.1` and `::1` (a single-machine cache). For a
+  LAN resolver, change `bind` to the host's LAN addresses and point clients at
+  it via DHCP. See **[CONFIGURATION.md](CONFIGURATION.md)**.
+- `fanout` mixes local DoT forward stubs with direct DoH, DoH3, and DoQ
+  upstreams, using `race` + `race-continue-on-error`.
+- The cache is tuned for day-to-day use (`prefetch`, `serve_stale`).
 - Prometheus metrics are always exposed on `127.0.0.1:9153`.
-- The cache is tuned for a local DNS cache, including `prefetch` and `serve_stale`.
-- `fanout` mixes four DoT-backed local forward stubs with direct DoH over HTTP/2, DoH over HTTP/3, and DoQ upstreams.
-- The shipped example includes two IPv4 DoT resolvers, two IPv6 DoT resolvers, one DoH endpoint, one DoH3 endpoint, and one DoQ endpoint.
+- Docker pulls the right image for your CPU architecture automatically.
 
-That layout is intentional. The four IP-address-based upstreams stay on DoT, where separate TLS server names are easier to handle through local `forward` stubs, while the same fanout block still demonstrates mixed transport support with DoH, DoH3, and DoQ.
+## Configuration
 
-## Best-of configuration guide
+For a complete, step-by-step walkthrough — listening addresses, choosing and
+mixing upstreams, domain filtering, automatic list updates, local zones/split
+DNS, cache tuning, and monitoring — see:
 
-These are the settings most users end up changing:
+➡️ **[CONFIGURATION.md](CONFIGURATION.md)**
 
-- `bind`: where the cache listens on IPv4 and IPv6
-- upstream selection: which resolvers you want to query in parallel
-- `cache`: size, `prefetch`, and `serve_stale`
-- `race`: return quickly when you care most about latency
-- `race-continue-on-error`: keep race mode without letting a fast transport failure or `SERVFAIL` win too early
-- `policy weighted-random`: query only a subset of upstreams per request
-- `worker-count`: limit concurrency per request
-- `timeout` and `attempt-count`: tune how aggressively fanout should give up on weak upstreams
-- `except` and `except-file`: keep selected domains out of the fanout path
+It also links to the full option reference of each component
+([fanout](https://github.com/TomTonic/fanout),
+[filterlist](https://github.com/TomTonic/filterlist),
+[websyncd](https://github.com/TomTonic/websyncd)).
 
-## Common patterns
+## Domain filtering
 
-### 1. Minimal direct setup with encrypted upstreams
+The image bundles the `filterlist` plugin, placed **before** `fanout` so blocked
+names never reach your upstreams. The shipped `Corefile` uses
+`action nxdomain` and hot-reloads whenever a list file changes. Lists in
+AdGuard/EasyList/ABP and hosts formats work as-is, and an optional `allowlist_dir`
+lets you override individual matches.
 
-If you want the smallest possible configuration, point `fanout` directly at encrypted resolvers:
+To keep lists fresh, the example `docker-compose.yml` includes optional
+[websyncd](https://github.com/TomTonic/websyncd) updater services — one per
+list, each syncing a single URL into the shared denylist directory. They sit
+behind a Compose profile named `updaters` and are **off by default**; enable
+them with `docker compose --profile updaters up -d` (or
+`COMPOSE_PROFILES=updaters`). Add your own list by copying a service block and
+changing `RESOURCE_URL` / `OUTPUT_PATH`. Details and per-option reference are in
+[CONFIGURATION.md](CONFIGURATION.md) (steps 4–5).
 
-```corefile
-. {
-    bind 192.168.178.2
-    bind fd00::53
+## Built on the maintained fanout fork
 
-    fanout . https://cloudflare-dns.com/dns-query h3://cloudflare-dns.com/dns-query quic://dns.adguard-dns.com {
-        race
-        race-continue-on-error
-        timeout 1500ms
-    }
+This image deliberately uses [TomTonic/fanout](https://github.com/TomTonic/fanout)
+instead of the original
+[networkservicemesh/fanout](https://github.com/networkservicemesh/fanout). The
+practical differences:
 
-    cache 300
-    errors
-    health
-}
+- **More upstream protocols.** In addition to UDP, TCP, and DoT, the fork adds
+  DoH over HTTP/2, DoH3 over HTTP/3, and DoQ — mixable in one `fanout` block.
+- **Better race behavior.** With `race-continue-on-error`, a transport failure
+  or an error response such as `SERVFAIL` does not beat a slightly slower
+  successful answer; `NXDOMAIN` still counts as a valid terminal answer and ends
+  the race.
+- **More resilient transport handling.** Stronger connection reuse and pooling
+  for HTTPS and QUIC, plus more robust handling of failed streams and unhealthy
+  connections.
+- **Better observability.** Additional per-upstream error metrics on the
+  Prometheus endpoint.
+- **Better supply-chain hygiene.** Tracks current CoreDNS and Go releases and
+  trims unnecessary dependency surface.
+
+## Image channels and releases
+
+This repository publishes two clearly separated image channels:
+
+- **Test images** are built automatically when `build-versions.json` changes on
+  `main`, as immutable pre-release tags such as
+  `tomtonic/coredns-fanout:v2.5.0-test.104.1.a1b2c3d` plus the floating
+  `tomtonic/coredns-fanout:test`.
+- **Production images** are published only when a GitHub Release is created,
+  publishing `tomtonic/coredns-fanout:vX.Y.Z` and the floating `vX.Y`, `vX`, and
+  `latest` tags. The stable tags never move unless a Release is created on
+  purpose.
+
+```bash
+docker pull tomtonic/coredns-fanout:test       # latest automatic test build
+docker pull tomtonic/coredns-fanout:latest     # latest production release
+docker pull tomtonic/coredns-fanout:v2.4.0     # a specific production release
 ```
 
-This is a good fit if you want a compact config and want to mix DoH, DoH3, and DoQ directly.
-
-### 2. Query only some upstreams, not all of them
-
-If you want several upstreams configured but do not want to hit all of them on every query, `weighted-random` is usually a better compromise:
-
-```corefile
-. {
-    fanout . 9.9.9.9 1.1.1.1 8.8.8.8 {
-        policy weighted-random
-        weighted-random-server-count 2
-        weighted-random-load-factor 100 80 40
-        worker-count 2
-        timeout 1200ms
-    }
-
-    cache 300
-    errors
-}
-```
-
-Use this when you want less upstream traffic, want to prefer some resolvers over others, or want to spread load without querying every upstream every time.
-
-### 3. Mixed transports in one fanout block
-
-The shipped example demonstrates a single `fanout` block that mixes DoT-backed local stubs with direct DoH over HTTP/2, DoH over HTTP/3, and DoQ:
-
-```corefile
-. {
-    fanout . 127.0.0.1:5301 127.0.0.1:5302 [::1]:5303 [::1]:5304 https://cloudflare-dns.com/dns-query h3://cloudflare-dns.com/dns-query quic://dns.adguard-dns.com {
-        policy weighted-random
-        weighted-random-server-count 4
-        worker-count 4
-        race
-        race-continue-on-error
-        timeout 1500ms
-    }
-
-    cache 300
-    prometheus 127.0.0.1:9153
-    errors
-    health
-}
-
-.:5301 {
-    forward . tls://9.9.9.11 {
-        tls_servername dns11.quad9.net
-    }
-}
-
-.:5302 {
-    forward . tls://1.1.1.1 {
-        tls_servername one.one.one.one
-    }
-}
-
-.:5303 {
-    forward . tls://2620:fe::11 {
-        tls_servername dns11.quad9.net
-    }
-}
-
-.:5304 {
-    forward . tls://2606:4700:4700::1111 {
-        tls_servername one.one.one.one
-    }
-}
-```
-
-This is a good fit when you want the example itself to show the full range of upstream transport choices supported by the maintained fork without dropping the IP-address-based upstreams back to plain DNS.
-
-### 4. Keep the latency benefits of race mode without accepting fast failures
-
-`race` alone is fast, but an early error response can win too soon. For a local DNS cache, this combination is often the safer default:
-
-```corefile
-. {
-    fanout . https://dns.google/dns-query https://cloudflare-dns.com/dns-query h3://cloudflare-dns.com/dns-query {
-        race
-        race-continue-on-error
-        timeout 1500ms
-    }
-}
-```
-
-This is useful when you want low latency but do not want one weak upstream returning `SERVFAIL` to decide the entire request immediately. In the intended behavior for this image, `NXDOMAIN` is considered a valid DNS answer and should still terminate the race.
-
-### 5. Exclude specific domains
-
-For split DNS, local zones, or special cases, exclude domains from the fanout path:
-
-```corefile
-. {
-    fanout . 9.9.9.9 1.1.1.1 {
-        except home.arpa
-        except corp.example
-        except-file /etc/coredns/fanout-exclude.txt
-    }
-}
-```
-
-That is useful when some names should be answered by local zones, static records, or other CoreDNS plugins instead.
-
-## Cache tuning for day-to-day use
-
-The shipped example already uses a sensible cache profile for a local DNS cache:
-
-```corefile
-cache {
-    success 100000
-    denial 20000
-    prefetch 5 3600s
-    serve_stale 3600s immediate
-}
-```
-
-In short:
-
-- `success` and `denial` control how many positive and negative responses are retained
-- `prefetch` refreshes frequently used entries before they expire
-- `serve_stale ... immediate` returns a stale response immediately and refreshes it in the background
-
-For a home network, `serve_stale` is often especially useful because clients still get an immediate answer even when an upstream is briefly slow or unavailable.
-
-## Monitoring
-
-The shipped example always enables the `prometheus` plugin in CoreDNS, so `fanout` metrics are available immediately on `127.0.0.1:9153`. In the maintained fork that includes:
-
-- request counters per upstream
-- request duration per upstream
-- RCODE counters per upstream
-- error counters per upstream and error class
-
-That makes it much easier to spot which upstream is slow, which one fails often, and whether your `race` or `weighted-random` setup behaves as expected.
-
-Small browser-based examples:
-
-- Open `http://127.0.0.1:9153/metrics` in a browser to see the raw CoreDNS and `fanout` metrics output.
-- Search that page for `coredns_fanout_` to focus on the plugin-specific metrics.
-- If you scrape this endpoint with a Prometheus server, you can open its expression browser with a query such as:
-
-```text
-http://127.0.0.1:9090/graph?g0.expr=sum(rate(coredns_fanout_request_count_total%5B5m%5D))&g0.tab=1
-```
-
-That example shows the recent total fanout request rate across all configured upstreams.
-
-## When to use which setup
-
-- Single-machine local cache: keep the loopback bindings
-- Resolver for the whole home network: change `bind` to the host's LAN addresses and point clients at that resolver via DHCP or static settings
-- Maximum simplicity: use direct `fanout` upstreams with DoH, DoH3, or DoQ
-- Maximum per-provider control: put `fanout` in front of local `forward` stubs
-- Low latency with occasional weak upstreams: enable both `race` and `race-continue-on-error`
-
-## Further reading
-
-This README is intentionally a compact, best-of guide for the practical use case of a local DNS cache. For complete plugin syntax, more examples, and all fanout options, see [TomTonic/fanout](https://github.com/TomTonic/fanout).
+Releasing for production: update `build-versions.json`, merge to `main`, let the
+`-test` build finish, then create a GitHub Release tagged `vX.Y.Z`. The release
+workflow publishes the production images and syncs `version.json` on `main`.
 
 ## Compatibility note
 
-This project switched from `networkservicemesh/fanout` to `TomTonic/fanout` in March 2026. If you explicitly need the older plugin line, you can still use an earlier image tag:
+This project switched from `networkservicemesh/fanout` to `TomTonic/fanout` in
+March 2026. If you explicitly need the older plugin line, use an earlier image
+tag:
 
 ```bash
 docker pull tomtonic/coredns-fanout:v2.0.0
