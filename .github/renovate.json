@@ -92,7 +92,8 @@
         "github-releases",
         "github-tags"
       ],
-      "pinDigests": false
+      "pinDigests": false,
+      "commitBody": "Release notes: {{sourceUrl}}/releases/tag/{{newVersion}}"
     },
     {
       "matchManagers": [
