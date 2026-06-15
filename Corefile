@@ -18,7 +18,7 @@
     # Domain filtering happens before fanout so blocked names never reach
     # upstream resolvers.
     filterlist {
-        denylist_dir /etc/coredns/denylist.d
+        denylist_dir /etc/coredns/denylists
         action nxdomain
     }
 
