@@ -1,0 +1,10 @@
+core_dependencies:
+  - module: github.com/coredns/coredns
+    name: CoreDNS
+    pinned_in: build-versions.json#.coredns_tag
+  - module: github.com/TomTonic/fanout
+    name: fanout
+    pinned_in: build-versions.json#.fanout_tag
+  - module: github.com/TomTonic/filterlist
+    name: filterlist
+    pinned_in: build-versions.json#.filterlist_tag
