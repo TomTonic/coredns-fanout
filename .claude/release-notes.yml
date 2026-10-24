@@ -8,3 +8,10 @@ core_dependencies:
   - module: github.com/TomTonic/filterlist
     name: filterlist
     pinned_in: build-versions.json#.filterlist_tag
+changelog_sources:
+  - module: github.com/coredns/coredns
+    url: https://github.com/coredns/coredns/releases
+  - module: github.com/TomTonic/fanout
+    url: https://github.com/TomTonic/fanout/releases
+  - module: github.com/TomTonic/filterlist
+    url: https://github.com/TomTonic/filterlist/releases
