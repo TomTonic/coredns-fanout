@@ -6,6 +6,7 @@ services:
     command: -conf /etc/coredns/Corefile
     network_mode: host
     volumes:
+      # Corefile and denylists/ (read by 'filterlist' as /etc/coredns/denylists)
       - .:/etc/coredns:ro
     restart: unless-stopped
 
@@ -23,11 +24,11 @@ services:
     image: ghcr.io/tomtonic/websyncd:latest
     environment:
       RESOURCE_URL: https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt
-      OUTPUT_PATH: /etc/coredns/denylist.d/adguard-filter.txt
+      OUTPUT_PATH: /etc/coredns/denylists/adguard-filter.txt
       POLL_INTERVAL: 3h
       HEARTBEAT_ADDR: :8081
     volumes:
-      - ./denylists:/etc/coredns/denylist.d
+      - ./denylists:/etc/coredns/denylists
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS --max-time 2 http://127.0.0.1:8081/healthz >/dev/null || exit 1"]
       interval: 10s
@@ -50,11 +51,11 @@ services:
     image: ghcr.io/tomtonic/websyncd:latest
     environment:
       RESOURCE_URL: https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
-      OUTPUT_PATH: /etc/coredns/denylist.d/stevenblack-hosts.txt
+      OUTPUT_PATH: /etc/coredns/denylists/stevenblack-hosts.txt
       POLL_INTERVAL: 6h
       HEARTBEAT_ADDR: :8081
     volumes:
-      - ./denylists:/etc/coredns/denylist.d
+      - ./denylists:/etc/coredns/denylists
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS --max-time 2 http://127.0.0.1:8081/healthz >/dev/null || exit 1"]
       interval: 10s
@@ -77,11 +78,11 @@ services:
     image: ghcr.io/tomtonic/websyncd:latest
     environment:
       RESOURCE_URL: https://small.oisd.nl
-      OUTPUT_PATH: /etc/coredns/denylist.d/oisd-small.txt
+      OUTPUT_PATH: /etc/coredns/denylists/oisd-small.txt
       POLL_INTERVAL: 6h
       HEARTBEAT_ADDR: :8081
     volumes:
-      - ./denylists:/etc/coredns/denylist.d
+      - ./denylists:/etc/coredns/denylists
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS --max-time 2 http://127.0.0.1:8081/healthz >/dev/null || exit 1"]
       interval: 10s

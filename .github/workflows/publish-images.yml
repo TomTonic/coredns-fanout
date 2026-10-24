@@ -79,25 +79,18 @@ jobs:
           git clone --branch "${COREDNS_TAG}" --depth 1 https://github.com/coredns/coredns.git
           cd coredns
 
-          # Ensure both custom plugins are present before forward in plugin.cfg.
-          if ! grep -q '^filterlist:github.com/TomTonic/filterlist$' plugin.cfg || ! grep -q '^fanout:github.com/TomTonic/fanout$' plugin.cfg; then
-            awk '
-              BEGIN { inserted = 0 }
-              /^forward:/ && inserted == 0 {
-                print "filterlist:github.com/TomTonic/filterlist"
-                print "fanout:github.com/TomTonic/fanout"
-                inserted = 1
-              }
-              $0 != "filterlist:github.com/TomTonic/filterlist" && $0 != "fanout:github.com/TomTonic/fanout" { print }
-              END {
-                if (inserted == 0) {
-                  print "filterlist:github.com/TomTonic/filterlist"
-                  print "fanout:github.com/TomTonic/fanout"
-                }
-              }
-            ' plugin.cfg > plugin.cfg.tmp
-            mv plugin.cfg.tmp plugin.cfg
-          fi
+          # Order matters: CoreDNS runs plugins in plugin.cfg order. filterlist
+          # goes right before cache, so blocked names are neither answered from
+          # nor stored in the cache and denylist changes apply immediately.
+          # fanout goes right before forward.
+          awk '
+            $0 == "filterlist:github.com/TomTonic/filterlist" || $0 == "fanout:github.com/TomTonic/fanout" { next }
+            /^cache:/ && !f { print "filterlist:github.com/TomTonic/filterlist"; f = 1 }
+            /^forward:/ && !g { print "fanout:github.com/TomTonic/fanout"; g = 1 }
+            { print }
+            END { if (!f || !g) exit 1 }
+          ' plugin.cfg > plugin.cfg.tmp
+          mv plugin.cfg.tmp plugin.cfg
 
       - name: Restore Go caches
         uses: actions/cache@v6

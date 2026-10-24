@@ -16,12 +16,19 @@
     local
 
     # Domain filtering happens before fanout so blocked names never reach
-    # upstream resolvers.
+    # upstream resolvers and are never cached. (CoreDNS fixes the plugin
+    # execution order itself: filterlist, then cache, then fanout. The order
+    # of the blocks in this file does not change it.)
+    # Lists are read from /etc/coredns/denylists, i.e. ./denylists on the host.
+    # Add 'allowlist_dir /etc/coredns/allowlists' to exempt domains again.
     filterlist {
         denylist_dir /etc/coredns/denylists
         action nxdomain
     }
 
+    # Upstream host names (https://, h3://, quic://) are always resolved as
+    # absolute names: use fully qualified names, no search domains.
+    #
     # Mixed fanout setup:
     # - four local DoT forward stubs for IP-address-based upstreams
     # - one DoH endpoint over HTTP/2
@@ -47,6 +54,7 @@
         denial 20000
         prefetch 5 3600s
         serve_stale 3600s immediate
+        # servfail 5s    # SERVFAIL is cached for 5s by default (CoreDNS 1.15+); 0 disables
     }
 
     log . "{remote} - {class} {type} {name} EDNS-DO:{>do} RCODE:{rcode} FLAGS:{>rflags} {duration}" {

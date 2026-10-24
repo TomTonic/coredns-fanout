@@ -36,9 +36,12 @@ my-dns/
 - The **Corefile** is where you spend most of your time.
 - The **docker-compose.yml** decides how the container is networked and which
   filter-list updater services run.
-- The **denylists/** directory is mounted read-only into CoreDNS at
-  `/etc/coredns/denylist.d` and is filled (and refreshed) by the updater
-  services.
+- The **denylists/** directory is part of the project directory that is mounted
+  read-only into CoreDNS at `/etc/coredns`, so CoreDNS reads it as
+  `/etc/coredns/denylists`. It is filled (and refreshed) by the updater
+  services, which mount the same host directory at the same path
+  (`/etc/coredns/denylists`) inside their own containers, so every service
+  sees one consistent location.
 
 ---
 
@@ -116,6 +119,12 @@ Full option reference: <https://github.com/TomTonic/fanout>
 | DoQ (DNS over QUIC) | `quic://` | `quic://dns.adguard-dns.com` |
 
 You can **mix all of these in a single `fanout` block**.
+
+> **Hostnames are always absolute.** For `https://`, `h3://` and `quic://`
+> upstreams the host name is resolved exactly as written; resolver search
+> domains and `ndots` are not applied (fanout v1.18 and CoreDNS 1.15 behave
+> this way). Write the full name, e.g. `quic://dnsbox.example.net` instead of
+> `quic://dnsbox`. IP-literal upstreams are not affected.
 
 ### Key options
 
@@ -254,13 +263,19 @@ stays active — so a broken download never takes filtering down.
 
 ```corefile
 filterlist {
-    denylist_dir /etc/coredns/denylist.d
-    allowlist_dir /etc/coredns/allowlist.d   # optional
+    denylist_dir /etc/coredns/denylists
+    allowlist_dir /etc/coredns/allowlists   # optional
     action nxdomain
 }
 ```
 
-Place this block before `fanout` in your `. { ... }` server block.
+Add this block to your `. { ... }` server block. CoreDNS decides the order in
+which plugins run (via its `plugin.cfg`), not the order of lines in the
+Corefile; `filterlist` always runs before `fanout`.
+
+> **Filtering and the cache.** In this image `filterlist` runs *before*
+> `cache`: blocked names are never stored in the cache, and a changed denylist
+> applies immediately instead of after cached answers expire.
 
 ---
 
@@ -280,11 +295,11 @@ denylist-updater-adguard-filter:
   image: ghcr.io/tomtonic/websyncd:latest
   environment:
     RESOURCE_URL: https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt
-    OUTPUT_PATH: /etc/coredns/denylist.d/adguard-filter.txt
+    OUTPUT_PATH: /etc/coredns/denylists/adguard-filter.txt
     POLL_INTERVAL: 6h
     HEARTBEAT_ADDR: :8081
   volumes:
-    - ./denylists:/etc/coredns/denylist.d
+    - ./denylists:/etc/coredns/denylists
   restart: unless-stopped
 ```
 
@@ -313,11 +328,11 @@ denylist-updater-oisd-small:
   image: ghcr.io/tomtonic/websyncd:latest
   environment:
     RESOURCE_URL: https://small.oisd.nl
-    OUTPUT_PATH: /etc/coredns/denylist.d/oisd-small.txt
+    OUTPUT_PATH: /etc/coredns/denylists/oisd-small.txt
     POLL_INTERVAL: 6h
     HEARTBEAT_ADDR: :8081
   volumes:
-    - ./denylists:/etc/coredns/denylist.d
+    - ./denylists:/etc/coredns/denylists
   restart: unless-stopped
 ```
 
@@ -417,6 +432,11 @@ cache {
 }
 ```
 
+Since CoreDNS 1.15 the cache also stores `SERVFAIL` answers, for 5 seconds by
+default. During a total upstream outage, repeated queries are then answered
+from the cache instead of hammering the upstreams. Tune it with
+`servfail DURATION` inside the `cache` block; `servfail 0` turns it off.
+
 `serve_stale … immediate` is especially valuable at home: clients still get an
 instant answer even when an upstream is briefly slow or unreachable.
 
@@ -468,7 +488,7 @@ A minimal but complete `. { ... }` block combining all of the above:
     local
 
     filterlist {
-        denylist_dir /etc/coredns/denylist.d
+        denylist_dir /etc/coredns/denylists
         action nxdomain
     }
 
